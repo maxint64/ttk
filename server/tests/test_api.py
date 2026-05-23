@@ -25,7 +25,10 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
             "POST", f"/api/activities/{activity['id']}/roles", {"name": "発表"}, 201
         )
         member = await self.request_json(
-            "POST", f"/api/activities/{activity['id']}/members", {"name": "山田"}, 201
+            "POST",
+            f"/api/activities/{activity['id']}/members",
+            {"name": "山田", "email": "yamada@example.com"},
+            201,
         )
         assignment = await self.request_json(
             "POST",
@@ -65,6 +68,34 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"error": "name is required"})
+
+    async def test_duplicate_role_and_member_email_errors(self):
+        activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
+        await self.request_json(
+            "POST", f"/api/activities/{activity['id']}/roles", {"name": "発表"}, 201
+        )
+        duplicate_role = await self.client.post(
+            f"/api/activities/{activity['id']}/roles", json={"name": "発表"}
+        )
+        self.assertEqual(duplicate_role.status_code, 400)
+        self.assertEqual(
+            duplicate_role.json(), {"error": "role already exists in this activity"}
+        )
+
+        await self.request_json(
+            "POST",
+            f"/api/activities/{activity['id']}/members",
+            {"name": "山田", "email": "same@example.com"},
+            201,
+        )
+        duplicate_email = await self.client.post(
+            f"/api/activities/{activity['id']}/members",
+            json={"name": "佐藤", "email": "SAME@example.com"},
+        )
+        self.assertEqual(duplicate_email.status_code, 400)
+        self.assertEqual(
+            duplicate_email.json(), {"error": "email already exists in this activity"}
+        )
 
     async def test_invalid_id_returns_bad_request(self):
         response = await self.client.delete("/api/activities/not-a-number")

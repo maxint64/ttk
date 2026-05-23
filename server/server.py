@@ -63,7 +63,18 @@ def create_app(
 
     @app.post("/api/activities/{activity_id}/members", status_code=201)
     async def add_member(activity_id: str, body: Any = Body(default=None)) -> dict[str, Any]:
-        return _add_activity_item(db_path, activity_id, body, database.add_member)
+        body = _read_json_object(body)
+        try:
+            return database.add_member(
+                db_path,
+                _parse_id(activity_id),
+                body.get("name", ""),
+                body.get("email", ""),
+            )
+        except database.ValidationError as error:
+            raise _api_error(400, str(error)) from error
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
 
     @app.delete(
         "/api/activities/{activity_id}/roles/{role_id}",

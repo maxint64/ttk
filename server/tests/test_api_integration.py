@@ -42,7 +42,13 @@ class ApiIntegrationTest(unittest.IsolatedAsyncioTestCase):
                 await self.request_json(
                     "POST",
                     f"/api/activities/{activity['id']}/members",
-                    {"name": f"メンバー{member_index + 1}"},
+                    {
+                        "name": f"メンバー{member_index + 1}",
+                        "email": (
+                            f"activity{activity_index + 1}-"
+                            f"member{member_index + 1}@example.com"
+                        ),
+                    },
                     201,
                 )
                 for member_index in range(5)

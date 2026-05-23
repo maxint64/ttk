@@ -17,7 +17,9 @@ class DatabaseTest(unittest.TestCase):
     def test_create_activity_with_roles_and_members(self):
         activity = database.create_activity(self.db_path, " 朝会 ")
         role = database.add_role(self.db_path, activity["id"], "司会")
-        member = database.add_member(self.db_path, activity["id"], "田中")
+        member = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
 
         activities = database.list_activities(self.db_path)
 
@@ -29,7 +31,7 @@ class DatabaseTest(unittest.TestCase):
 
     def test_add_role_does_not_assign_member(self):
         activity = database.create_activity(self.db_path, "朝会")
-        database.add_member(self.db_path, activity["id"], "田中")
+        database.add_member(self.db_path, activity["id"], "田中", "tanaka@example.com")
 
         database.add_role(self.db_path, activity["id"], "司会")
 
@@ -40,7 +42,9 @@ class DatabaseTest(unittest.TestCase):
     def test_create_and_list_assignments(self):
         activity = database.create_activity(self.db_path, "朝会")
         role = database.add_role(self.db_path, activity["id"], "司会")
-        member = database.add_member(self.db_path, activity["id"], "田中")
+        member = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
 
         assignment = database.add_assignment(
             self.db_path, activity["id"], role["id"], member["id"], "2026-05-23"
@@ -68,8 +72,12 @@ class DatabaseTest(unittest.TestCase):
     def test_assignment_replaces_role_member_for_same_day(self):
         activity = database.create_activity(self.db_path, "朝会")
         role = database.add_role(self.db_path, activity["id"], "司会")
-        first = database.add_member(self.db_path, activity["id"], "田中")
-        second = database.add_member(self.db_path, activity["id"], "佐藤")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
 
         database.add_assignment(
             self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
@@ -85,9 +93,13 @@ class DatabaseTest(unittest.TestCase):
     def test_rotate_assignments_moves_to_next_member(self):
         activity = database.create_activity(self.db_path, "朝会")
         role = database.add_role(self.db_path, activity["id"], "司会")
-        first = database.add_member(self.db_path, activity["id"], "田中")
-        second = database.add_member(self.db_path, activity["id"], "佐藤")
-        database.add_member(self.db_path, activity["id"], "鈴木")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
+        database.add_member(self.db_path, activity["id"], "鈴木", "suzuki@example.com")
         database.add_assignment(
             self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
         )
@@ -101,8 +113,12 @@ class DatabaseTest(unittest.TestCase):
     def test_rotate_assignments_wraps_last_member_to_first(self):
         activity = database.create_activity(self.db_path, "朝会")
         role = database.add_role(self.db_path, activity["id"], "司会")
-        first = database.add_member(self.db_path, activity["id"], "田中")
-        second = database.add_member(self.db_path, activity["id"], "佐藤")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
         database.add_assignment(
             self.db_path, activity["id"], role["id"], second["id"], "2026-05-23"
         )
@@ -114,7 +130,7 @@ class DatabaseTest(unittest.TestCase):
     def test_rotate_assignments_skips_roles_without_manual_assignment(self):
         activity = database.create_activity(self.db_path, "朝会")
         database.add_role(self.db_path, activity["id"], "司会")
-        database.add_member(self.db_path, activity["id"], "田中")
+        database.add_member(self.db_path, activity["id"], "田中", "tanaka@example.com")
 
         self.assertEqual(database.rotate_assignments(self.db_path, "2026-05-24"), [])
         self.assertEqual(database.list_assignments(self.db_path, activity["id"]), [])
@@ -122,8 +138,12 @@ class DatabaseTest(unittest.TestCase):
     def test_rotate_assignments_keeps_existing_target_day_assignment(self):
         activity = database.create_activity(self.db_path, "朝会")
         role = database.add_role(self.db_path, activity["id"], "司会")
-        first = database.add_member(self.db_path, activity["id"], "田中")
-        second = database.add_member(self.db_path, activity["id"], "佐藤")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
         database.add_assignment(
             self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
         )
@@ -140,7 +160,9 @@ class DatabaseTest(unittest.TestCase):
         activity = database.create_activity(self.db_path, "朝会")
         other_activity = database.create_activity(self.db_path, "掃除当番")
         role = database.add_role(self.db_path, other_activity["id"], "床")
-        member = database.add_member(self.db_path, activity["id"], "田中")
+        member = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
 
         with self.assertRaises(database.NotFoundError):
             database.add_assignment(
@@ -150,7 +172,9 @@ class DatabaseTest(unittest.TestCase):
     def test_delete_activity_cascades_children(self):
         activity = database.create_activity(self.db_path, "掃除当番")
         role = database.add_role(self.db_path, activity["id"], "床")
-        member = database.add_member(self.db_path, activity["id"], "佐藤")
+        member = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
         database.add_assignment(
             self.db_path, activity["id"], role["id"], member["id"], "2026-05-23"
         )
@@ -162,6 +186,20 @@ class DatabaseTest(unittest.TestCase):
     def test_rejects_blank_name(self):
         with self.assertRaises(database.ValidationError):
             database.create_activity(self.db_path, " ")
+
+    def test_rejects_duplicate_role_in_activity(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        database.add_role(self.db_path, activity["id"], "司会")
+
+        with self.assertRaises(database.ValidationError):
+            database.add_role(self.db_path, activity["id"], "司会")
+
+    def test_rejects_duplicate_member_email_in_activity(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        database.add_member(self.db_path, activity["id"], "田中", "same@example.com")
+
+        with self.assertRaises(database.ValidationError):
+            database.add_member(self.db_path, activity["id"], "佐藤", "SAME@example.com")
 
 
 if __name__ == "__main__":

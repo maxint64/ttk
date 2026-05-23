@@ -29,15 +29,18 @@ def init_db(db_path: str | Path) -> None:
                 activity_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+                UNIQUE (activity_id, name)
             );
 
             CREATE TABLE IF NOT EXISTS members (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 activity_id INTEGER NOT NULL,
                 name TEXT NOT NULL,
+                email TEXT,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
+                UNIQUE (activity_id, email)
             );
 
             CREATE TABLE IF NOT EXISTS role_assignments (
@@ -53,6 +56,22 @@ def init_db(db_path: str | Path) -> None:
                 UNIQUE (activity_id, role_id, member_id, assigned_on)
             );
             """
+        )
+        _migrate_members_email(connection)
+        _create_unique_index_if_possible(
+            connection,
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS roles_activity_name_unique
+            ON roles (activity_id, name)
+            """,
+        )
+        _create_unique_index_if_possible(
+            connection,
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS members_activity_email_unique
+            ON members (activity_id, email)
+            WHERE email IS NOT NULL
+            """,
         )
 
 
@@ -101,11 +120,53 @@ def delete_activity(db_path: str | Path, activity_id: int) -> None:
 
 
 def add_role(db_path: str | Path, activity_id: int, name: str) -> dict[str, Any]:
-    return _add_activity_item(db_path, "roles", activity_id, name)
+    name = _clean_name(name)
+    with connect(db_path) as connection:
+        _require_activity(connection, activity_id)
+        if _item_exists(connection, "roles", activity_id, "name", name):
+            raise ValidationError("role already exists in this activity")
+
+        try:
+            cursor = connection.execute(
+                "INSERT INTO roles (activity_id, name) VALUES (?, ?)",
+                (activity_id, name),
+            )
+        except sqlite3.IntegrityError as error:
+            raise ValidationError("role already exists in this activity") from error
+
+        role_id = cursor.lastrowid
+        row = connection.execute(
+            "SELECT id, name, created_at FROM roles WHERE id = ?", (role_id,)
+        ).fetchone()
+
+    return dict(row)
 
 
-def add_member(db_path: str | Path, activity_id: int, name: str) -> dict[str, Any]:
-    return _add_activity_item(db_path, "members", activity_id, name)
+def add_member(
+    db_path: str | Path, activity_id: int, name: str, email: str
+) -> dict[str, Any]:
+    name = _clean_name(name)
+    email = _clean_email(email)
+    with connect(db_path) as connection:
+        _require_activity(connection, activity_id)
+        if _item_exists(connection, "members", activity_id, "email", email):
+            raise ValidationError("email already exists in this activity")
+
+        try:
+            cursor = connection.execute(
+                "INSERT INTO members (activity_id, name, email) VALUES (?, ?, ?)",
+                (activity_id, name, email),
+            )
+        except sqlite3.IntegrityError as error:
+            raise ValidationError("email already exists in this activity") from error
+
+        member_id = cursor.lastrowid
+        row = connection.execute(
+            "SELECT id, name, email, created_at FROM members WHERE id = ?",
+            (member_id,),
+        ).fetchone()
+
+    return dict(row)
 
 
 def delete_role(db_path: str | Path, activity_id: int, role_id: int) -> None:
@@ -250,8 +311,11 @@ def get_activity(db_path: str | Path, activity_id: int) -> dict[str, Any]:
 
 def _group_items(connection: sqlite3.Connection, table: str) -> dict[int, list[dict[str, Any]]]:
     grouped: dict[int, list[dict[str, Any]]] = {}
+    columns = "id, activity_id, name, created_at"
+    if table == "members":
+        columns = "id, activity_id, name, email, created_at"
     rows = connection.execute(
-        f"SELECT id, activity_id, name, created_at FROM {table} ORDER BY id ASC"
+        f"SELECT {columns} FROM {table} ORDER BY id ASC"
     ).fetchall()
 
     for row in rows:
@@ -278,25 +342,6 @@ def _group_assignments(connection: sqlite3.Connection) -> dict[int, list[dict[st
         grouped.setdefault(activity_id, []).append(assignment)
 
     return grouped
-
-
-def _add_activity_item(
-    db_path: str | Path, table: str, activity_id: int, name: str
-) -> dict[str, Any]:
-    name = _clean_name(name)
-    with connect(db_path) as connection:
-        _require_activity(connection, activity_id)
-
-        cursor = connection.execute(
-            f"INSERT INTO {table} (activity_id, name) VALUES (?, ?)",
-            (activity_id, name),
-        )
-        item_id = cursor.lastrowid
-        row = connection.execute(
-            f"SELECT id, name, created_at FROM {table} WHERE id = ?", (item_id,)
-        ).fetchone()
-
-    return dict(row)
 
 
 def _delete_activity_item(
@@ -334,6 +379,16 @@ def _require_activity_item(
         raise NotFoundError(error_message)
 
 
+def _item_exists(
+    connection: sqlite3.Connection, table: str, activity_id: int, column: str, value: str
+) -> bool:
+    row = connection.execute(
+        f"SELECT id FROM {table} WHERE activity_id = ? AND {column} = ? LIMIT 1",
+        (activity_id, value),
+    ).fetchone()
+    return row is not None
+
+
 def _assignment_exists(
     connection: sqlite3.Connection, activity_id: int, role_id: int, assigned_on: str
 ) -> bool:
@@ -365,6 +420,17 @@ def _clean_name(name: str) -> str:
     return cleaned
 
 
+def _clean_email(email: str) -> str:
+    cleaned = email.strip().lower()
+    if not cleaned:
+        raise ValidationError("email is required")
+    if len(cleaned) > 254:
+        raise ValidationError("email must be 254 characters or fewer")
+    if "@" not in cleaned or cleaned.startswith("@") or cleaned.endswith("@"):
+        raise ValidationError("email must be valid")
+    return cleaned
+
+
 def _clean_assigned_on(value: str | None) -> str:
     if value is None:
         return date.today().isoformat()
@@ -377,5 +443,22 @@ def _clean_assigned_on(value: str | None) -> str:
         date.fromisoformat(cleaned)
     except ValueError as error:
         raise ValidationError("assigned_on must be a valid YYYY-MM-DD date") from error
-
     return cleaned
+
+
+def _migrate_members_email(connection: sqlite3.Connection) -> None:
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(members)").fetchall()
+    }
+    if "email" not in columns:
+        connection.execute("ALTER TABLE members ADD COLUMN email TEXT")
+
+
+def _create_unique_index_if_possible(
+    connection: sqlite3.Connection, statement: str
+) -> None:
+    try:
+        connection.execute(statement)
+    except sqlite3.IntegrityError:
+        pass

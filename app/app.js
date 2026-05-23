@@ -93,15 +93,28 @@ function render() {
     roleForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const input = roleForm.elements.roleName;
-      await addItem(activity.id, "roles", input.value);
-      input.value = "";
+      try {
+        await addItem(activity.id, "roles", { name: input.value });
+        input.value = "";
+      } catch (error) {
+        alert(error.message);
+      }
     });
 
     memberForm.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const input = memberForm.elements.memberName;
-      await addItem(activity.id, "members", input.value);
-      input.value = "";
+      const nameInput = memberForm.elements.memberName;
+      const emailInput = memberForm.elements.memberEmail;
+      try {
+        await addItem(activity.id, "members", {
+          name: nameInput.value,
+          email: emailInput.value,
+        });
+        nameInput.value = "";
+        emailInput.value = "";
+      } catch (error) {
+        alert(error.message);
+      }
     });
 
     renderItems(node.querySelector(".role-list"), activity, "roles");
@@ -114,13 +127,15 @@ function render() {
   });
 }
 
-async function addItem(activityId, key, rawValue) {
-  const value = rawValue.trim();
-  if (!value) return;
+async function addItem(activityId, key, values) {
+  const body = Object.fromEntries(
+    Object.entries(values).map(([field, value]) => [field, value.trim()])
+  );
+  if (!body.name) return;
 
   await apiRequest(`/api/activities/${activityId}/${key}`, {
     method: "POST",
-    body: { name: value },
+    body,
   });
   await loadAndRender();
 }
@@ -138,7 +153,13 @@ function renderItems(list, activity, key) {
     chip.className = "chip";
 
     const label = document.createElement("span");
+    label.className = "chip-label";
     label.textContent = item.name;
+    if (key === "members" && item.email) {
+      const email = document.createElement("small");
+      email.textContent = item.email;
+      label.append(email);
+    }
 
     const removeButton = document.createElement("button");
     removeButton.type = "button";
