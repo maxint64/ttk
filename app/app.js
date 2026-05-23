@@ -4,12 +4,8 @@ const activityList = document.querySelector("#activityList");
 const summaryText = document.querySelector("#summaryText");
 const template = document.querySelector("#activityTemplate");
 const today = new Date().toISOString().slice(0, 10);
-const mockAssignmentStorageKey = `ttk:mock-assignments:${today}`;
-const mockInitializedStorageKey = `ttk:mock-initialized:${today}`;
 
 let activities = [];
-let mockAssignments = loadMockAssignments();
-let mockInitializedActivities = loadMockInitializedActivities();
 
 activityForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -166,7 +162,6 @@ function renderAssignmentTable(node, activity) {
   }
 
   empty.hidden = true;
-  ensureMockAssignment(activity);
 
   const table = document.createElement("table");
   table.className = "assignment-table";
@@ -196,7 +191,8 @@ function renderAssignmentTable(node, activity) {
     activity.roles.forEach((role) => {
       const td = document.createElement("td");
       const button = document.createElement("button");
-      const checked = isMockAssigned(activity.id, role.id, member.id);
+      const assignment = findTodayAssignment(activity, role.id, member.id);
+      const checked = Boolean(assignment);
 
       button.type = "button";
       button.className = "assignment-cell";
@@ -206,9 +202,8 @@ function renderAssignmentTable(node, activity) {
         "aria-label",
         `${today}: ${member.name}が${role.name}を担当`
       );
-      button.addEventListener("click", () => {
-        toggleMockAssignment(activity.id, role.id, member.id);
-        renderAssignmentTable(node, activity);
+      button.addEventListener("click", async () => {
+        await toggleAssignment(activity.id, role.id, member.id, assignment);
       });
 
       td.append(button);
@@ -222,62 +217,30 @@ function renderAssignmentTable(node, activity) {
   tableWrap.append(table);
 }
 
-function assignmentKey(activityId, roleId, memberId) {
-  return `${activityId}:${roleId}:${memberId}`;
-}
-
-function isMockAssigned(activityId, roleId, memberId) {
-  return mockAssignments.includes(assignmentKey(activityId, roleId, memberId));
-}
-
-function toggleMockAssignment(activityId, roleId, memberId) {
-  const key = assignmentKey(activityId, roleId, memberId);
-  if (mockAssignments.includes(key)) {
-    mockAssignments = mockAssignments.filter((item) => item !== key);
+async function toggleAssignment(activityId, roleId, memberId, assignment) {
+  if (assignment) {
+    await apiRequest(`/api/activities/${activityId}/assignments/${assignment.id}`, {
+      method: "DELETE",
+    });
   } else {
-    mockAssignments = [...mockAssignments, key];
+    await apiRequest(`/api/activities/${activityId}/assignments`, {
+      method: "POST",
+      body: {
+        role_id: roleId,
+        member_id: memberId,
+        assigned_on: today,
+      },
+    });
   }
-  saveMockAssignments();
+  await loadAndRender();
 }
 
-function ensureMockAssignment(activity) {
-  if (mockInitializedActivities.includes(activity.id)) return;
-
-  mockAssignments = [
-    ...mockAssignments,
-    assignmentKey(activity.id, activity.roles[0].id, activity.members[0].id),
-  ];
-  mockInitializedActivities = [...mockInitializedActivities, activity.id];
-  saveMockAssignments();
-  saveMockInitializedActivities();
-}
-
-function loadMockAssignments() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(mockAssignmentStorageKey) || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveMockAssignments() {
-  localStorage.setItem(mockAssignmentStorageKey, JSON.stringify(mockAssignments));
-}
-
-function loadMockInitializedActivities() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(mockInitializedStorageKey) || "[]");
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveMockInitializedActivities() {
-  localStorage.setItem(
-    mockInitializedStorageKey,
-    JSON.stringify(mockInitializedActivities)
+function findTodayAssignment(activity, roleId, memberId) {
+  return activity.assignments.find(
+    (assignment) =>
+      assignment.assigned_on === today &&
+      assignment.role_id === roleId &&
+      assignment.member_id === memberId
   );
 }
 
