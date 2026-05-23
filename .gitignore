@@ -1,2 +1,7 @@
 .venv/
 .uv-cache/
+.vscode/
+.pytest_cache/
+**/__pycache__/
+*.py[cod]
+data/*.sqlite3
