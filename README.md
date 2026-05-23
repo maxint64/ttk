@@ -20,7 +20,7 @@
 Docker Compose では Web API を起動します。データは Docker volume `ttk-data` に保存されます。
 
 ```bash
-docker compose up --build
+make docker-up
 ```
 
 起動後、ブラウザで `http://127.0.0.1:8000` を開きます。
@@ -28,13 +28,13 @@ docker compose up --build
 停止する場合:
 
 ```bash
-docker compose down
+make docker-down
 ```
 
 日次ローテーションは、crontab から 0時に単発実行します。
 
 ```cron
-0 0 * * * cd /path/to/ttk && docker compose run --rm ttk uv run python -m server.run_rotation
+0 0 * * * cd /path/to/ttk && make docker-rotate
 ```
 
 ## ローカルで起動
@@ -42,8 +42,8 @@ docker compose down
 ローカルでは、まず依存パッケージを同期してから Web API を起動します。データは `data/ttk.sqlite3` に保存されます。
 
 ```bash
-uv sync
-uv run python -m server.run
+make sync
+make dev
 ```
 
 起動後、ブラウザで `http://127.0.0.1:8000` を開きます。
@@ -51,11 +51,22 @@ uv run python -m server.run
 日次ローテーションは、crontab から 0時に単発実行します。
 
 ```cron
-0 0 * * * cd /path/to/ttk && uv run python -m server.run_rotation
+0 0 * * * cd /path/to/ttk && make rotate
 ```
 
 ## テスト
 
 ```bash
-uv run python -m unittest discover -s server/tests -t .
+make test
+```
+
+## よく使うコマンド
+
+```bash
+make help
+make build
+make clean
+make clean-data
+make docker-up
+make docker-down
 ```
