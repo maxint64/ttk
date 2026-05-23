@@ -1,20 +1,23 @@
 # ttk
 
-担当君（TannTouKunn）は、ひとつのアクティビティの中で複数メンバーが複数の役割を回って担当することを管理するためのウェブアプリです。
+担当君（TanTouKun）は、ひとつのアクティビティの中で複数メンバーが複数の役割を回って担当することを管理するためのウェブアプリです。アクティビティごとに役割とメンバーを登録し、担当履歴をもとに次の担当者を日次でローテーションします。
 
-## MVP
+主な機能:
 
-- アクティビティの追加、削除
-- アクティビティへの役割の追加、削除
-- アクティビティへのメンバーの追加、削除
+- アクティビティの作成と削除
+- アクティビティごとの役割、メンバーの管理
+- 役割ごとの担当者の手動登録
+- 担当者の自動ローテーション
 
 ## Docker で起動
+
+Docker Compose では、Web API とローテーション処理を別サービスとして起動します。どちらも同じ Docker volume `ttk-data` にある SQLite データベースを使います。
 
 ```bash
 docker compose up --build
 ```
 
-起動後、ブラウザで `http://127.0.0.1:8000` を開きます。データは Docker volume `ttk-data` に保存されます。ローテーション処理は API とは別の `ttk-rotation` サービスで実行されます。
+起動後、ブラウザで `http://127.0.0.1:8000` を開きます。
 
 停止する場合:
 
@@ -24,33 +27,20 @@ docker compose down
 
 ## ローカルで起動
 
-`uv` で依存パッケージを同期してから起動します。
+ローカルでは、まず依存パッケージを同期してから Web API を起動します。データは `data/ttk.sqlite3` に保存されます。
 
 ```bash
 uv sync
 uv run python run.py
 ```
 
-起動後、ブラウザで `http://127.0.0.1:8000` を開きます。データは `data/ttk.sqlite3` に保存されます。
+起動後、ブラウザで `http://127.0.0.1:8000` を開きます。
 
-ローテーション処理をローカルで動かす場合は、別のターミナルで起動します。
+日次ローテーションも動かす場合は、別のターミナルで worker を起動します。
 
 ```bash
 uv run python run_rotation.py
 ```
-
-## API
-
-- `GET /api/activities`
-- `POST /api/activities` body: `{ "name": "朝会" }`
-- `DELETE /api/activities/{activity_id}`
-- `POST /api/activities/{activity_id}/roles` body: `{ "name": "司会" }`
-- `DELETE /api/activities/{activity_id}/roles/{role_id}`
-- `POST /api/activities/{activity_id}/members` body: `{ "name": "田中" }`
-- `DELETE /api/activities/{activity_id}/members/{member_id}`
-- `GET /api/activities/{activity_id}/assignments`
-- `POST /api/activities/{activity_id}/assignments` body: `{ "role_id": 1, "member_id": 1, "assigned_on": "2026-05-23" }`
-- `DELETE /api/activities/{activity_id}/assignments/{assignment_id}`
 
 ## テスト
 
