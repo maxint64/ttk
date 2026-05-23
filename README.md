@@ -14,7 +14,7 @@
 docker compose up --build
 ```
 
-起動後、ブラウザで `http://127.0.0.1:8000` を開きます。データは Docker volume `ttk-data` に保存されます。
+起動後、ブラウザで `http://127.0.0.1:8000` を開きます。データは Docker volume `ttk-data` に保存されます。ローテーション処理は API とは別の `ttk-rotation` サービスで実行されます。
 
 停止する場合:
 
@@ -32,6 +32,12 @@ uv run python run.py
 ```
 
 起動後、ブラウザで `http://127.0.0.1:8000` を開きます。データは `data/ttk.sqlite3` に保存されます。
+
+ローテーション処理をローカルで動かす場合は、別のターミナルで起動します。
+
+```bash
+uv run python run_rotation.py
+```
 
 ## API
 

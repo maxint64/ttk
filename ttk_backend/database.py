@@ -139,26 +139,22 @@ def add_assignment(
             connection, "members", activity_id, member_id, "member not found"
         )
 
+        connection.execute(
+            """
+            DELETE FROM role_assignments
+            WHERE activity_id = ? AND role_id = ? AND assigned_on = ?
+            """,
+            (activity_id, role_id, assigned_on),
+        )
         cursor = connection.execute(
             """
-            INSERT OR IGNORE INTO role_assignments
+            INSERT INTO role_assignments
                 (activity_id, role_id, member_id, assigned_on)
             VALUES (?, ?, ?, ?)
             """,
             (activity_id, role_id, member_id, assigned_on),
         )
-
-        if cursor.rowcount == 1:
-            assignment_id = cursor.lastrowid
-        else:
-            row = connection.execute(
-                """
-                SELECT id FROM role_assignments
-                WHERE activity_id = ? AND role_id = ? AND member_id = ? AND assigned_on = ?
-                """,
-                (activity_id, role_id, member_id, assigned_on),
-            ).fetchone()
-            assignment_id = row["id"]
+        assignment_id = cursor.lastrowid
 
         row = connection.execute(
             """
@@ -170,6 +166,68 @@ def add_assignment(
         ).fetchone()
 
     return dict(row)
+
+
+def rotate_assignments(db_path: str | Path, target_on: str | None = None) -> list[dict[str, Any]]:
+    target_on = _clean_assigned_on(target_on)
+    with connect(db_path) as connection:
+        roles = connection.execute(
+            "SELECT id, activity_id FROM roles ORDER BY activity_id ASC, id ASC"
+        ).fetchall()
+        created: list[dict[str, Any]] = []
+
+        for role in roles:
+            activity_id = role["activity_id"]
+            role_id = role["id"]
+            if _assignment_exists(connection, activity_id, role_id, target_on):
+                continue
+
+            latest = connection.execute(
+                """
+                SELECT member_id
+                FROM role_assignments
+                WHERE activity_id = ? AND role_id = ? AND assigned_on < ?
+                ORDER BY assigned_on DESC, id DESC
+                LIMIT 1
+                """,
+                (activity_id, role_id, target_on),
+            ).fetchone()
+            if latest is None:
+                continue
+
+            members = connection.execute(
+                """
+                SELECT id
+                FROM members
+                WHERE activity_id = ?
+                ORDER BY id ASC
+                """,
+                (activity_id,),
+            ).fetchall()
+            member_ids = [member["id"] for member in members]
+            if not member_ids:
+                continue
+
+            next_member_id = _next_member_id(member_ids, latest["member_id"])
+            cursor = connection.execute(
+                """
+                INSERT INTO role_assignments
+                    (activity_id, role_id, member_id, assigned_on)
+                VALUES (?, ?, ?, ?)
+                """,
+                (activity_id, role_id, next_member_id, target_on),
+            )
+            row = connection.execute(
+                """
+                SELECT id, activity_id, role_id, member_id, assigned_on, created_at
+                FROM role_assignments
+                WHERE id = ?
+                """,
+                (cursor.lastrowid,),
+            ).fetchone()
+            created.append(dict(row))
+
+    return created
 
 
 def delete_assignment(db_path: str | Path, activity_id: int, assignment_id: int) -> None:
@@ -274,6 +332,28 @@ def _require_activity_item(
     ).fetchone()
     if item is None:
         raise NotFoundError(error_message)
+
+
+def _assignment_exists(
+    connection: sqlite3.Connection, activity_id: int, role_id: int, assigned_on: str
+) -> bool:
+    row = connection.execute(
+        """
+        SELECT id
+        FROM role_assignments
+        WHERE activity_id = ? AND role_id = ? AND assigned_on = ?
+        """,
+        (activity_id, role_id, assigned_on),
+    ).fetchone()
+    return row is not None
+
+
+def _next_member_id(member_ids: list[int], current_member_id: int) -> int:
+    try:
+        current_index = member_ids.index(current_member_id)
+    except ValueError:
+        return member_ids[0]
+    return member_ids[(current_index + 1) % len(member_ids)]
 
 
 def _clean_name(name: str) -> str:

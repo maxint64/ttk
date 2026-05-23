@@ -27,6 +27,16 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(activities[0]["members"], [member])
         self.assertEqual(activities[0]["assignments"], [])
 
+    def test_add_role_does_not_assign_member(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        database.add_member(self.db_path, activity["id"], "田中")
+
+        database.add_role(self.db_path, activity["id"], "司会")
+
+        self.assertEqual(
+            database.get_activity(self.db_path, activity["id"])["assignments"], []
+        )
+
     def test_create_and_list_assignments(self):
         activity = database.create_activity(self.db_path, "朝会")
         role = database.add_role(self.db_path, activity["id"], "司会")
@@ -53,6 +63,77 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(
             database.get_activity(self.db_path, activity["id"])["assignments"],
             [assignment],
+        )
+
+    def test_assignment_replaces_role_member_for_same_day(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        first = database.add_member(self.db_path, activity["id"], "田中")
+        second = database.add_member(self.db_path, activity["id"], "佐藤")
+
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
+        )
+        assignment = database.add_assignment(
+            self.db_path, activity["id"], role["id"], second["id"], "2026-05-23"
+        )
+
+        self.assertEqual(
+            database.list_assignments(self.db_path, activity["id"]), [assignment]
+        )
+
+    def test_rotate_assignments_moves_to_next_member(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        first = database.add_member(self.db_path, activity["id"], "田中")
+        second = database.add_member(self.db_path, activity["id"], "佐藤")
+        database.add_member(self.db_path, activity["id"], "鈴木")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
+        )
+
+        created = database.rotate_assignments(self.db_path, "2026-05-24")
+
+        self.assertEqual(len(created), 1)
+        self.assertEqual(created[0]["member_id"], second["id"])
+        self.assertEqual(created[0]["assigned_on"], "2026-05-24")
+
+    def test_rotate_assignments_wraps_last_member_to_first(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        first = database.add_member(self.db_path, activity["id"], "田中")
+        second = database.add_member(self.db_path, activity["id"], "佐藤")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], second["id"], "2026-05-23"
+        )
+
+        created = database.rotate_assignments(self.db_path, "2026-05-24")
+
+        self.assertEqual(created[0]["member_id"], first["id"])
+
+    def test_rotate_assignments_skips_roles_without_manual_assignment(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        database.add_role(self.db_path, activity["id"], "司会")
+        database.add_member(self.db_path, activity["id"], "田中")
+
+        self.assertEqual(database.rotate_assignments(self.db_path, "2026-05-24"), [])
+        self.assertEqual(database.list_assignments(self.db_path, activity["id"]), [])
+
+    def test_rotate_assignments_keeps_existing_target_day_assignment(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        first = database.add_member(self.db_path, activity["id"], "田中")
+        second = database.add_member(self.db_path, activity["id"], "佐藤")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
+        )
+        manual = database.add_assignment(
+            self.db_path, activity["id"], role["id"], second["id"], "2026-05-24"
+        )
+
+        self.assertEqual(database.rotate_assignments(self.db_path, "2026-05-24"), [])
+        self.assertEqual(
+            database.list_assignments(self.db_path, activity["id"])[0], manual
         )
 
     def test_assignment_requires_role_and_member_in_activity(self):

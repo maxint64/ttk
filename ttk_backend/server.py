@@ -9,12 +9,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
+from .config import DEFAULT_DB_PATH, DEFAULT_STATIC_DIR
 from . import database
-
-
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_DB_PATH = ROOT / "data" / "ttk.sqlite3"
-DEFAULT_STATIC_DIR = ROOT
 
 
 def create_app(
