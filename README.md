@@ -44,6 +44,13 @@ make dev
 0 0 * * * cd /path/to/ttk && make rotate
 ```
 
+日付を指定して手動実行する場合:
+
+```bash
+make rotate DATE=2026-05-24
+make docker-rotate DATE=2026-05-24
+```
+
 ## テスト
 
 ```bash
