@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ttk_backend import database
+from server import database
 
 
 class DatabaseTest(unittest.TestCase):

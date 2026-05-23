@@ -15,8 +15,8 @@ RUN uv sync --frozen
 
 COPY . .
 
-RUN uv run python -m unittest discover -s tests
+RUN uv run python -m unittest discover -s server/tests -t .
 
 EXPOSE 8000
 
-CMD ["uv", "run", "python", "run.py"]
+CMD ["uv", "run", "python", "-m", "server.run"]

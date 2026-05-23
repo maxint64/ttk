@@ -1,8 +1,8 @@
 import os
 from pathlib import Path
 
-from ttk_backend.config import DEFAULT_DB_PATH
-from ttk_backend.server import run
+from server.config import DEFAULT_DB_PATH
+from server.server import run
 
 
 if __name__ == "__main__":

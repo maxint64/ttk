@@ -4,14 +4,14 @@ from pathlib import Path
 
 import httpx
 
-from ttk_backend.server import create_app
+from server.server import create_app
 
 
 class ApiTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "test.sqlite3"
-        self.app = create_app(self.db_path, Path.cwd())
+        self.app = create_app(self.db_path, Path.cwd() / "app")
         transport = httpx.ASGITransport(app=self.app)
         self.client = httpx.AsyncClient(transport=transport, base_url="http://testserver")
 

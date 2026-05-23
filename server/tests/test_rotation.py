@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ttk_backend import rotation
+from server import rotation
 
 
 class RotationTest(unittest.TestCase):

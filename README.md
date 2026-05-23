@@ -9,6 +9,12 @@
 - 役割ごとの担当者の手動登録
 - 担当者の自動ローテーション
 
+## ディレクトリ構成
+
+- `app/`: フロントエンド
+- `server/`: バックエンド
+- `server/tests/`: バックエンドのテスト
+
 ## Docker で起動
 
 Docker Compose では Web API を起動します。データは Docker volume `ttk-data` に保存されます。
@@ -28,7 +34,7 @@ docker compose down
 日次ローテーションは、crontab から 0時に単発実行します。
 
 ```cron
-0 0 * * * cd /path/to/ttk && docker compose run --rm ttk uv run python run_rotation.py
+0 0 * * * cd /path/to/ttk && docker compose run --rm ttk uv run python -m server.run_rotation
 ```
 
 ## ローカルで起動
@@ -37,7 +43,7 @@ docker compose down
 
 ```bash
 uv sync
-uv run python run.py
+uv run python -m server.run
 ```
 
 起動後、ブラウザで `http://127.0.0.1:8000` を開きます。
@@ -45,11 +51,11 @@ uv run python run.py
 日次ローテーションは、crontab から 0時に単発実行します。
 
 ```cron
-0 0 * * * cd /path/to/ttk && uv run python run_rotation.py
+0 0 * * * cd /path/to/ttk && uv run python -m server.run_rotation
 ```
 
 ## テスト
 
 ```bash
-uv run python -m unittest discover -s tests
+uv run python -m unittest discover -s server/tests -t .
 ```
