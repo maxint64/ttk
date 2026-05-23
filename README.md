@@ -42,6 +42,9 @@ uv run python run.py
 - `DELETE /api/activities/{activity_id}/roles/{role_id}`
 - `POST /api/activities/{activity_id}/members` body: `{ "name": "田中" }`
 - `DELETE /api/activities/{activity_id}/members/{member_id}`
+- `GET /api/activities/{activity_id}/assignments`
+- `POST /api/activities/{activity_id}/assignments` body: `{ "role_id": 1, "member_id": 1, "assigned_on": "2026-05-23" }`
+- `DELETE /api/activities/{activity_id}/assignments/{assignment_id}`
 
 ## テスト
 

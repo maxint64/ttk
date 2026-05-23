@@ -27,11 +27,30 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         member = await self.request_json(
             "POST", f"/api/activities/{activity['id']}/members", {"name": "山田"}, 201
         )
+        assignment = await self.request_json(
+            "POST",
+            f"/api/activities/{activity['id']}/assignments",
+            {
+                "role_id": role["id"],
+                "member_id": member["id"],
+                "assigned_on": "2026-05-23",
+            },
+            201,
+        )
 
         index = await self.request_json("GET", "/api/activities")
         self.assertEqual(index["activities"][0]["roles"], [role])
         self.assertEqual(index["activities"][0]["members"], [member])
+        self.assertEqual(index["activities"][0]["assignments"], [assignment])
 
+        assignments = await self.request_json(
+            "GET", f"/api/activities/{activity['id']}/assignments"
+        )
+        self.assertEqual(assignments["assignments"], [assignment])
+
+        await self.request_empty(
+            "DELETE", f"/api/activities/{activity['id']}/assignments/{assignment['id']}"
+        )
         await self.request_empty("DELETE", f"/api/activities/{activity['id']}/roles/{role['id']}")
         await self.request_empty(
             "DELETE", f"/api/activities/{activity['id']}/members/{member['id']}"
@@ -52,6 +71,25 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"error": "invalid id"})
+
+    async def test_assignment_validation_errors(self):
+        activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
+
+        missing_role = await self.client.post(
+            f"/api/activities/{activity['id']}/assignments",
+            json={"member_id": 1, "assigned_on": "2026-05-23"},
+        )
+        self.assertEqual(missing_role.status_code, 400)
+        self.assertEqual(missing_role.json(), {"error": "role_id is required"})
+
+        bad_date = await self.client.post(
+            f"/api/activities/{activity['id']}/assignments",
+            json={"role_id": 1, "member_id": 1, "assigned_on": "2026-13-99"},
+        )
+        self.assertEqual(bad_date.status_code, 400)
+        self.assertEqual(
+            bad_date.json(), {"error": "assigned_on must be a valid YYYY-MM-DD date"}
+        )
 
     async def request_json(self, method, path, payload=None, expected_status=200):
         response = await self.client.request(method, path, json=payload)

@@ -87,6 +87,46 @@ def create_app(
         _delete_activity_item(db_path, activity_id, member_id, database.delete_member)
         return Response(status_code=204)
 
+    @app.get("/api/activities/{activity_id}/assignments")
+    async def list_assignments(activity_id: str) -> dict[str, list[dict[str, Any]]]:
+        try:
+            assignments = database.list_assignments(db_path, _parse_id(activity_id))
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
+        return {"assignments": assignments}
+
+    @app.post("/api/activities/{activity_id}/assignments", status_code=201)
+    async def add_assignment(
+        activity_id: str, body: Any = Body(default=None)
+    ) -> dict[str, Any]:
+        body = _read_json_object(body)
+        try:
+            return database.add_assignment(
+                db_path,
+                _parse_id(activity_id),
+                _read_body_id(body, "role_id"),
+                _read_body_id(body, "member_id"),
+                body.get("assigned_on"),
+            )
+        except database.ValidationError as error:
+            raise _api_error(400, str(error)) from error
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
+
+    @app.delete(
+        "/api/activities/{activity_id}/assignments/{assignment_id}",
+        status_code=204,
+        response_class=Response,
+    )
+    async def delete_assignment(activity_id: str, assignment_id: str) -> Response:
+        try:
+            database.delete_assignment(
+                db_path, _parse_id(activity_id), _parse_id(assignment_id)
+            )
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
+        return Response(status_code=204)
+
     @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def api_not_found(path: str) -> None:
         raise _api_error(404, "not found")
@@ -131,6 +171,12 @@ def _parse_id(value: str) -> int:
         return int(value)
     except ValueError as error:
         raise _api_error(400, "invalid id") from error
+
+
+def _read_body_id(body: dict[str, Any], key: str) -> int:
+    if key not in body:
+        raise _api_error(400, f"{key} is required")
+    return _parse_id(str(body[key]))
 
 
 def _api_error(status_code: int, message: str) -> HTTPException:
