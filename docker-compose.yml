@@ -1,0 +1,15 @@
+services:
+  ttk:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      TTK_HOST: 0.0.0.0
+      TTK_PORT: 8000
+      TTK_DB_PATH: /app/data/ttk.sqlite3
+    volumes:
+      - ttk-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  ttk-data:

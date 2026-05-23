@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ttk - 担当君</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="workspace" aria-labelledby="app-title">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">TannTouKunn</p>
+            <h1 id="app-title">ttk</h1>
+          </div>
+          <p class="summary" id="summaryText">アクティビティ 0件</p>
+        </header>
+
+        <form class="create-form" id="activityForm">
+          <label for="activityName">アクティビティ名</label>
+          <div class="input-row">
+            <input id="activityName" name="activityName" type="text" placeholder="例: 朝会、掃除当番、勉強会" autocomplete="off" required>
+            <button type="submit">追加</button>
+          </div>
+        </form>
+
+        <section class="activity-list" id="activityList" aria-label="アクティビティ一覧"></section>
+      </section>
+    </main>
+
+    <template id="activityTemplate">
+      <article class="activity-card">
+        <div class="activity-header">
+          <div>
+            <h2 class="activity-title"></h2>
+            <p class="activity-meta"></p>
+          </div>
+          <button class="icon-button danger activity-delete" type="button" aria-label="アクティビティを削除">削除</button>
+        </div>
+
+        <div class="columns">
+          <section class="panel">
+            <div class="panel-title">
+              <h3>役割</h3>
+              <span class="count role-count">0</span>
+            </div>
+            <form class="mini-form role-form">
+              <input type="text" name="roleName" placeholder="例: 司会、記録、発表" autocomplete="off" required>
+              <button type="submit">追加</button>
+            </form>
+            <ul class="chip-list role-list"></ul>
+          </section>
+
+          <section class="panel">
+            <div class="panel-title">
+              <h3>メンバー</h3>
+              <span class="count member-count">0</span>
+            </div>
+            <form class="mini-form member-form">
+              <input type="text" name="memberName" placeholder="例: 田中、佐藤、山田" autocomplete="off" required>
+              <button type="submit">追加</button>
+            </form>
+            <ul class="chip-list member-list"></ul>
+          </section>
+        </div>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
