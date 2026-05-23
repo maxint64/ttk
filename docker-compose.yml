@@ -10,14 +10,6 @@ services:
     volumes:
       - ttk-data:/app/data
     restart: unless-stopped
-  ttk-rotation:
-    build: .
-    command: ["uv", "run", "python", "run_rotation.py"]
-    environment:
-      TTK_DB_PATH: /app/data/ttk.sqlite3
-    volumes:
-      - ttk-data:/app/data
-    restart: unless-stopped
 
 volumes:
   ttk-data:

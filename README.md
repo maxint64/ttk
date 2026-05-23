@@ -11,7 +11,7 @@
 
 ## Docker で起動
 
-Docker Compose では、Web API とローテーション処理を別サービスとして起動します。どちらも同じ Docker volume `ttk-data` にある SQLite データベースを使います。
+Docker Compose では Web API を起動します。データは Docker volume `ttk-data` に保存されます。
 
 ```bash
 docker compose up --build
@@ -25,6 +25,12 @@ docker compose up --build
 docker compose down
 ```
 
+日次ローテーションは、crontab から 0時に単発実行します。
+
+```cron
+0 0 * * * cd /path/to/ttk && docker compose run --rm ttk uv run python run_rotation.py
+```
+
 ## ローカルで起動
 
 ローカルでは、まず依存パッケージを同期してから Web API を起動します。データは `data/ttk.sqlite3` に保存されます。
@@ -36,10 +42,10 @@ uv run python run.py
 
 起動後、ブラウザで `http://127.0.0.1:8000` を開きます。
 
-日次ローテーションも動かす場合は、別のターミナルで worker を起動します。
+日次ローテーションは、crontab から 0時に単発実行します。
 
-```bash
-uv run python run_rotation.py
+```cron
+0 0 * * * cd /path/to/ttk && uv run python run_rotation.py
 ```
 
 ## テスト
