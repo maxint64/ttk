@@ -24,10 +24,11 @@ docker compose down
 
 ## ローカルで起動
 
-Python 3 があれば追加インストールなしで起動できます。
+`uv` で依存パッケージを同期してから起動します。
 
 ```bash
-python3 run.py
+uv sync
+uv run python run.py
 ```
 
 起動後、ブラウザで `http://127.0.0.1:8000` を開きます。データは `data/ttk.sqlite3` に保存されます。
@@ -45,5 +46,5 @@ python3 run.py
 ## テスト
 
 ```bash
-python3 -m unittest discover -s tests
+uv run python -m unittest discover -s tests
 ```

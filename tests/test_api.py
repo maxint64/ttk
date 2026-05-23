@@ -1,69 +1,68 @@
-import json
 import tempfile
-import threading
 import unittest
-from http.server import ThreadingHTTPServer
 from pathlib import Path
-from urllib.request import Request, urlopen
 
-from ttk_backend.server import create_handler
+import httpx
+
+from ttk_backend.server import create_app
 
 
-class ApiTest(unittest.TestCase):
-    def setUp(self):
+class ApiTest(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
         self.db_path = Path(self.temp_dir.name) / "test.sqlite3"
-        handler = create_handler(self.db_path, Path.cwd())
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
-        self.thread.start()
-        self.base_url = f"http://127.0.0.1:{self.server.server_port}"
+        self.app = create_app(self.db_path, Path.cwd())
+        transport = httpx.ASGITransport(app=self.app)
+        self.client = httpx.AsyncClient(transport=transport, base_url="http://testserver")
 
-    def tearDown(self):
-        self.server.shutdown()
-        self.server.server_close()
-        self.thread.join(timeout=2)
+    async def asyncTearDown(self):
+        await self.client.aclose()
         self.temp_dir.cleanup()
 
-    def test_activity_role_member_flow(self):
-        activity = self.request_json("POST", "/api/activities", {"name": "勉強会"})
-        role = self.request_json(
-            "POST", f"/api/activities/{activity['id']}/roles", {"name": "発表"}
+    async def test_activity_role_member_flow(self):
+        activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
+        role = await self.request_json(
+            "POST", f"/api/activities/{activity['id']}/roles", {"name": "発表"}, 201
         )
-        member = self.request_json(
-            "POST", f"/api/activities/{activity['id']}/members", {"name": "山田"}
+        member = await self.request_json(
+            "POST", f"/api/activities/{activity['id']}/members", {"name": "山田"}, 201
         )
 
-        index = self.request_json("GET", "/api/activities")
+        index = await self.request_json("GET", "/api/activities")
         self.assertEqual(index["activities"][0]["roles"], [role])
         self.assertEqual(index["activities"][0]["members"], [member])
 
-        self.request_empty("DELETE", f"/api/activities/{activity['id']}/roles/{role['id']}")
-        self.request_empty(
+        await self.request_empty("DELETE", f"/api/activities/{activity['id']}/roles/{role['id']}")
+        await self.request_empty(
             "DELETE", f"/api/activities/{activity['id']}/members/{member['id']}"
         )
-        self.request_empty("DELETE", f"/api/activities/{activity['id']}")
+        await self.request_empty("DELETE", f"/api/activities/{activity['id']}")
 
-        index = self.request_json("GET", "/api/activities")
+        index = await self.request_json("GET", "/api/activities")
         self.assertEqual(index["activities"], [])
 
-    def request_json(self, method, path, payload=None):
-        data = None if payload is None else json.dumps(payload).encode("utf-8")
-        request = Request(
-            self.base_url + path,
-            data=data,
-            method=method,
-            headers={"Content-Type": "application/json"},
-        )
-        with urlopen(request) as response:
-            return json.loads(response.read().decode("utf-8"))
+    async def test_validation_errors_keep_existing_shape(self):
+        response = await self.client.post("/api/activities", json={"name": " "})
 
-    def request_empty(self, method, path):
-        request = Request(self.base_url + path, method=method)
-        with urlopen(request) as response:
-            self.assertEqual(response.status, 204)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "name is required"})
+
+    async def test_invalid_id_returns_bad_request(self):
+        response = await self.client.delete("/api/activities/not-a-number")
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json(), {"error": "invalid id"})
+
+    async def request_json(self, method, path, payload=None, expected_status=200):
+        response = await self.client.request(method, path, json=payload)
+        self.assertEqual(response.status_code, expected_status)
+        return response.json()
+
+    async def request_empty(self, method, path):
+        response = await self.client.request(method, path)
+        self.assertEqual(response.status_code, 204)
+        self.assertEqual(response.content, b"")
 
 
 if __name__ == "__main__":
     unittest.main()
-

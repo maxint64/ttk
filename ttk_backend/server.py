@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-import json
-import mimetypes
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from typing import Any, Callable
+
+import uvicorn
+from fastapi import Body, FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from . import database
 
@@ -14,144 +17,131 @@ DEFAULT_DB_PATH = ROOT / "data" / "ttk.sqlite3"
 DEFAULT_STATIC_DIR = ROOT
 
 
-def create_handler(db_path: str | Path, static_dir: str | Path = DEFAULT_STATIC_DIR):
+def create_app(
+    db_path: str | Path = DEFAULT_DB_PATH,
+    static_dir: str | Path = DEFAULT_STATIC_DIR,
+) -> FastAPI:
     db_path = Path(db_path)
     static_dir = Path(static_dir).resolve()
     database.init_db(db_path)
 
-    class TtkRequestHandler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:
-            if self.path == "/api/activities":
-                self._send_json({"activities": database.list_activities(db_path)})
-                return
+    app = FastAPI(title="ttk")
 
-            self._serve_static(static_dir)
+    @app.exception_handler(HTTPException)
+    async def http_exception_handler(
+        request: Request, error: HTTPException
+    ) -> JSONResponse:
+        if isinstance(error.detail, dict):
+            return JSONResponse(error.detail, status_code=error.status_code)
+        return JSONResponse({"error": error.detail}, status_code=error.status_code)
 
-        def do_POST(self) -> None:
-            path = self._path_parts()
-            body = self._read_json()
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, error: RequestValidationError
+    ) -> JSONResponse:
+        return JSONResponse({"error": "request body must be valid JSON"}, status_code=400)
 
-            try:
-                if path == ["api", "activities"]:
-                    activity = database.create_activity(db_path, body.get("name", ""))
-                    self._send_json(activity, status=201)
-                    return
+    @app.get("/api/activities")
+    async def list_activities() -> dict[str, list[dict[str, Any]]]:
+        return {"activities": database.list_activities(db_path)}
 
-                if len(path) == 4 and path[:2] == ["api", "activities"]:
-                    activity_id = int(path[2])
-                    if path[3] == "roles":
-                        item = database.add_role(db_path, activity_id, body.get("name", ""))
-                        self._send_json(item, status=201)
-                        return
-                    if path[3] == "members":
-                        item = database.add_member(db_path, activity_id, body.get("name", ""))
-                        self._send_json(item, status=201)
-                        return
-            except ValueError:
-                self._send_json({"error": "invalid id"}, status=400)
-                return
-            except database.ValidationError as error:
-                self._send_json({"error": str(error)}, status=400)
-                return
-            except database.NotFoundError as error:
-                self._send_json({"error": str(error)}, status=404)
-                return
+    @app.post("/api/activities", status_code=201)
+    async def create_activity(body: Any = Body(default=None)) -> dict[str, Any]:
+        body = _read_json_object(body)
+        try:
+            return database.create_activity(db_path, body.get("name", ""))
+        except database.ValidationError as error:
+            raise _api_error(400, str(error)) from error
 
-            self._send_json({"error": "not found"}, status=404)
+    @app.delete("/api/activities/{activity_id}", status_code=204, response_class=Response)
+    async def delete_activity(activity_id: str) -> Response:
+        try:
+            database.delete_activity(db_path, _parse_id(activity_id))
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
+        return Response(status_code=204)
 
-        def do_DELETE(self) -> None:
-            path = self._path_parts()
+    @app.post("/api/activities/{activity_id}/roles", status_code=201)
+    async def add_role(activity_id: str, body: Any = Body(default=None)) -> dict[str, Any]:
+        return _add_activity_item(db_path, activity_id, body, database.add_role)
 
-            try:
-                if len(path) == 3 and path[:2] == ["api", "activities"]:
-                    database.delete_activity(db_path, int(path[2]))
-                    self._send_empty()
-                    return
+    @app.post("/api/activities/{activity_id}/members", status_code=201)
+    async def add_member(activity_id: str, body: Any = Body(default=None)) -> dict[str, Any]:
+        return _add_activity_item(db_path, activity_id, body, database.add_member)
 
-                if len(path) == 5 and path[:2] == ["api", "activities"]:
-                    activity_id = int(path[2])
-                    item_id = int(path[4])
-                    if path[3] == "roles":
-                        database.delete_role(db_path, activity_id, item_id)
-                        self._send_empty()
-                        return
-                    if path[3] == "members":
-                        database.delete_member(db_path, activity_id, item_id)
-                        self._send_empty()
-                        return
-            except ValueError:
-                self._send_json({"error": "invalid id"}, status=400)
-                return
-            except database.NotFoundError as error:
-                self._send_json({"error": str(error)}, status=404)
-                return
+    @app.delete(
+        "/api/activities/{activity_id}/roles/{role_id}",
+        status_code=204,
+        response_class=Response,
+    )
+    async def delete_role(activity_id: str, role_id: str) -> Response:
+        _delete_activity_item(db_path, activity_id, role_id, database.delete_role)
+        return Response(status_code=204)
 
-            self._send_json({"error": "not found"}, status=404)
+    @app.delete(
+        "/api/activities/{activity_id}/members/{member_id}",
+        status_code=204,
+        response_class=Response,
+    )
+    async def delete_member(activity_id: str, member_id: str) -> Response:
+        _delete_activity_item(db_path, activity_id, member_id, database.delete_member)
+        return Response(status_code=204)
 
-        def log_message(self, format: str, *args) -> None:
-            return
+    @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+    async def api_not_found(path: str) -> None:
+        raise _api_error(404, "not found")
 
-        def _read_json(self) -> dict:
-            length = int(self.headers.get("Content-Length", "0"))
-            if length == 0:
-                return {}
+    app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
+    return app
 
-            raw = self.rfile.read(length)
-            try:
-                parsed = json.loads(raw.decode("utf-8"))
-            except json.JSONDecodeError:
-                raise database.ValidationError("request body must be valid JSON")
 
-            if not isinstance(parsed, dict):
-                raise database.ValidationError("request body must be a JSON object")
-            return parsed
+def _read_json_object(parsed: Any) -> dict[str, Any]:
+    if parsed is None:
+        return {}
 
-        def _path_parts(self) -> list[str]:
-            path = urlparse(self.path).path.strip("/")
-            return [unquote(part) for part in path.split("/") if part]
+    if not isinstance(parsed, dict):
+        raise _api_error(400, "request body must be a JSON object")
+    return parsed
 
-        def _serve_static(self, static_root: Path) -> None:
-            parsed_path = urlparse(self.path).path
-            requested = "index.html" if parsed_path in ("", "/") else parsed_path.lstrip("/")
-            target = (static_root / requested).resolve()
 
-            if static_root not in target.parents and target != static_root:
-                self._send_json({"error": "not found"}, status=404)
-                return
+def _add_activity_item(
+    db_path: Path,
+    activity_id: str,
+    parsed_body: Any,
+    add_item: Callable[[Path, int, str], dict[str, Any]],
+) -> dict[str, Any]:
+    body = _read_json_object(parsed_body)
+    try:
+        return add_item(db_path, _parse_id(activity_id), body.get("name", ""))
+    except database.ValidationError as error:
+        raise _api_error(400, str(error)) from error
+    except database.NotFoundError as error:
+        raise _api_error(404, str(error)) from error
 
-            if not target.is_file():
-                self._send_json({"error": "not found"}, status=404)
-                return
 
-            content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-            self.send_response(200)
-            self.send_header("Content-Type", content_type)
-            self.end_headers()
-            self.wfile.write(target.read_bytes())
+def _delete_activity_item(db_path: Path, activity_id: str, item_id: str, delete_item) -> None:
+    try:
+        delete_item(db_path, _parse_id(activity_id), _parse_id(item_id))
+    except database.NotFoundError as error:
+        raise _api_error(404, str(error)) from error
 
-        def _send_json(self, payload: dict, status: int = 200) -> None:
-            data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-            self.send_response(status)
-            self.send_header("Content-Type", "application/json; charset=utf-8")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
 
-        def _send_empty(self, status: int = 204) -> None:
-            self.send_response(status)
-            self.end_headers()
+def _parse_id(value: str) -> int:
+    try:
+        return int(value)
+    except ValueError as error:
+        raise _api_error(400, "invalid id") from error
 
-    return TtkRequestHandler
+
+def _api_error(status_code: int, message: str) -> HTTPException:
+    return HTTPException(status_code=status_code, detail={"error": message})
 
 
 def run(host: str = "127.0.0.1", port: int = 8000, db_path: Path = DEFAULT_DB_PATH) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    handler = create_handler(db_path)
-    server = ThreadingHTTPServer((host, port), handler)
     print(f"ttk is running at http://{host}:{port}")
-    server.serve_forever()
+    uvicorn.run(create_app(db_path), host=host, port=port)
 
 
 if __name__ == "__main__":
     run()
-

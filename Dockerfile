@@ -8,10 +8,15 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+COPY --from=ghcr.io/astral-sh/uv:0.5.29 /uv /uvx /bin/
+
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen
+
 COPY . .
 
-RUN python -m unittest discover -s tests
+RUN uv run python -m unittest discover -s tests
 
 EXPOSE 8000
 
-CMD ["python", "run.py"]
+CMD ["uv", "run", "python", "run.py"]

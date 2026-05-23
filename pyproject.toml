@@ -1,0 +1,11 @@
+[project]
+name = "ttk"
+version = "0.1.0"
+description = "担当君 backend"
+requires-python = ">=3.12"
+dependencies = [
+    "anyio==4.8.0",
+    "fastapi==0.115.6",
+    "httpx==0.28.1",
+    "uvicorn[standard]==0.34.0",
+]
