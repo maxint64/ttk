@@ -65,6 +65,7 @@ make test
 ```bash
 make help
 make build
+make seed
 make clean
 make clean-data
 make docker-up
