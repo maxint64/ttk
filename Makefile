@@ -1,4 +1,4 @@
-.PHONY: help sync dev test clean clean-data seed rotate docker-up docker-down docker-rotate
+.PHONY: help sync dev stop test clean clean-data seed rotate docker-up docker-down docker-rotate
 
 PYTHON := uv run python
 TEST_CMD := $(PYTHON) -m unittest discover -s server/tests -t .
@@ -8,6 +8,7 @@ help:
 	@printf "Available targets:\n"
 	@printf "  make sync        Install/update Python dependencies\n"
 	@printf "  make dev         Start the local development server\n"
+	@printf "  make stop        Stop the local development server, then remove generated Python files\n"
 	@printf "  make test        Run backend tests, then remove generated Python files\n"
 	@printf "  make clean       Remove generated Python files\n"
 	@printf "  make clean-data  Remove the local SQLite database\n"
@@ -22,6 +23,10 @@ sync:
 
 dev:
 	$(PYTHON) -m server.run
+
+stop:
+	$(PYTHON) -m server.stop
+	@$(MAKE) --no-print-directory clean
 
 test:
 	$(TEST_CMD)
