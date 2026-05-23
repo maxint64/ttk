@@ -25,7 +25,7 @@ dev:
 
 test:
 	$(TEST_CMD)
-	$(MAKE) clean
+	@$(MAKE) --no-print-directory clean
 
 clean:
 	@find server -type d -name __pycache__ -prune -exec rm -rf {} +
@@ -37,7 +37,7 @@ clean-data:
 
 seed:
 	$(PYTHON) -m server.seed
-	$(MAKE) clean
+	@$(MAKE) --no-print-directory clean
 
 rotate:
 	$(PYTHON) -m server.run_rotation $(ROTATE_ARGS)
