@@ -69,6 +69,47 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"error": "name is required"})
 
+        too_long = await self.client.post("/api/activities", json={"name": "あ" * 145})
+        self.assertEqual(too_long.status_code, 400)
+        self.assertEqual(
+            too_long.json(), {"error": "name must be 144 characters or fewer"}
+        )
+
+        invisible = await self.client.post(
+            "/api/activities", json={"name": "\u200b勉強会"}
+        )
+        self.assertEqual(invisible.status_code, 400)
+        self.assertEqual(
+            invisible.json(), {"error": "name contains invalid characters"}
+        )
+
+    async def test_role_and_member_text_validation_happens_in_api(self):
+        activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
+
+        bad_role = await self.client.post(
+            f"/api/activities/{activity['id']}/roles", json={"name": "発\u0007表"}
+        )
+        self.assertEqual(bad_role.status_code, 400)
+        self.assertEqual(bad_role.json(), {"error": "name contains invalid characters"})
+
+        bad_member_name = await self.client.post(
+            f"/api/activities/{activity['id']}/members",
+            json={"name": "\u200b山田", "email": "yamada@example.com"},
+        )
+        self.assertEqual(bad_member_name.status_code, 400)
+        self.assertEqual(
+            bad_member_name.json(), {"error": "name contains invalid characters"}
+        )
+
+        bad_member_email = await self.client.post(
+            f"/api/activities/{activity['id']}/members",
+            json={"name": "山田", "email": "yamada\u200c@example.com"},
+        )
+        self.assertEqual(bad_member_email.status_code, 400)
+        self.assertEqual(
+            bad_member_email.json(), {"error": "email contains invalid characters"}
+        )
+
     async def test_duplicate_role_and_member_email_errors(self):
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
         await self.request_json(

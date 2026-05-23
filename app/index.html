@@ -20,7 +20,7 @@
         <form class="create-form" id="activityForm">
           <label for="activityName">アクティビティ名</label>
           <div class="input-row">
-            <input id="activityName" name="activityName" type="text" placeholder="例: 朝会、掃除当番、勉強会" autocomplete="off" required>
+            <input id="activityName" name="activityName" type="text" placeholder="例: 朝会、掃除当番、勉強会" autocomplete="off" maxlength="144" required>
             <button type="submit">追加</button>
           </div>
         </form>
@@ -55,7 +55,7 @@
               <span class="count role-count">0</span>
             </div>
             <form class="mini-form role-form">
-              <input type="text" name="roleName" placeholder="例: 司会、記録、発表" autocomplete="off" required>
+              <input type="text" name="roleName" placeholder="例: 司会、記録、発表" autocomplete="off" maxlength="144" required>
               <button type="submit">追加</button>
             </form>
             <ul class="chip-list role-list"></ul>
@@ -67,8 +67,8 @@
               <span class="count member-count">0</span>
             </div>
             <form class="mini-form member-form">
-              <input type="text" name="memberName" placeholder="例: 田中、佐藤、山田" autocomplete="off" required>
-              <input type="email" name="memberEmail" placeholder="例: tanaka@example.com" autocomplete="email" required>
+              <input type="text" name="memberName" placeholder="例: 田中、佐藤、山田" autocomplete="off" maxlength="144" required>
+              <input type="email" name="memberEmail" placeholder="例: tanaka@example.com" autocomplete="email" maxlength="144" required>
               <button type="submit">追加</button>
             </form>
             <ul class="chip-list member-list"></ul>

@@ -104,7 +104,6 @@ def list_activities(db_path: str | Path) -> list[dict[str, Any]]:
 
 
 def create_activity(db_path: str | Path, name: str) -> dict[str, Any]:
-    name = _clean_name(name)
     with connect(db_path) as connection:
         cursor = connection.execute("INSERT INTO activities (name) VALUES (?)", (name,))
         activity_id = cursor.lastrowid
@@ -120,7 +119,6 @@ def delete_activity(db_path: str | Path, activity_id: int) -> None:
 
 
 def add_role(db_path: str | Path, activity_id: int, name: str) -> dict[str, Any]:
-    name = _clean_name(name)
     with connect(db_path) as connection:
         _require_activity(connection, activity_id)
         if _item_exists(connection, "roles", activity_id, "name", name):
@@ -145,8 +143,6 @@ def add_role(db_path: str | Path, activity_id: int, name: str) -> dict[str, Any]
 def add_member(
     db_path: str | Path, activity_id: int, name: str, email: str
 ) -> dict[str, Any]:
-    name = _clean_name(name)
-    email = _clean_email(email)
     with connect(db_path) as connection:
         _require_activity(connection, activity_id)
         if _item_exists(connection, "members", activity_id, "email", email):
@@ -409,26 +405,6 @@ def _next_member_id(member_ids: list[int], current_member_id: int) -> int:
     except ValueError:
         return member_ids[0]
     return member_ids[(current_index + 1) % len(member_ids)]
-
-
-def _clean_name(name: str) -> str:
-    cleaned = name.strip()
-    if not cleaned:
-        raise ValidationError("name is required")
-    if len(cleaned) > 120:
-        raise ValidationError("name must be 120 characters or fewer")
-    return cleaned
-
-
-def _clean_email(email: str) -> str:
-    cleaned = email.strip().lower()
-    if not cleaned:
-        raise ValidationError("email is required")
-    if len(cleaned) > 254:
-        raise ValidationError("email must be 254 characters or fewer")
-    if "@" not in cleaned or cleaned.startswith("@") or cleaned.endswith("@"):
-        raise ValidationError("email must be valid")
-    return cleaned
 
 
 def _clean_assigned_on(value: str | None) -> str:

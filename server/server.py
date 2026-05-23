@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import unicodedata
+from datetime import date
 from pathlib import Path
 from typing import Any, Callable
 
@@ -11,6 +13,9 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import DEFAULT_DB_PATH, DEFAULT_STATIC_DIR
 from . import database
+
+
+MAX_TEXT_LENGTH = 144
 
 
 def create_app(
@@ -45,7 +50,7 @@ def create_app(
     async def create_activity(body: Any = Body(default=None)) -> dict[str, Any]:
         body = _read_json_object(body)
         try:
-            return database.create_activity(db_path, body.get("name", ""))
+            return database.create_activity(db_path, _read_text(body, "name"))
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
 
@@ -68,8 +73,8 @@ def create_app(
             return database.add_member(
                 db_path,
                 _parse_id(activity_id),
-                body.get("name", ""),
-                body.get("email", ""),
+                _read_text(body, "name"),
+                _read_email(body, "email"),
             )
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
@@ -113,7 +118,7 @@ def create_app(
                 _parse_id(activity_id),
                 _read_body_id(body, "role_id"),
                 _read_body_id(body, "member_id"),
-                body.get("assigned_on"),
+                _read_optional_date(body, "assigned_on"),
             )
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
@@ -159,7 +164,7 @@ def _add_activity_item(
 ) -> dict[str, Any]:
     body = _read_json_object(parsed_body)
     try:
-        return add_item(db_path, _parse_id(activity_id), body.get("name", ""))
+        return add_item(db_path, _parse_id(activity_id), _read_text(body, "name"))
     except database.ValidationError as error:
         raise _api_error(400, str(error)) from error
     except database.NotFoundError as error:
@@ -184,6 +189,48 @@ def _read_body_id(body: dict[str, Any], key: str) -> int:
     if key not in body:
         raise _api_error(400, f"{key} is required")
     return _parse_id(str(body[key]))
+
+
+def _read_text(body: dict[str, Any], key: str) -> str:
+    return _clean_text(body.get(key, ""), key)
+
+
+def _read_email(body: dict[str, Any], key: str) -> str:
+    cleaned = _clean_text(body.get(key, ""), key).lower()
+    if "@" not in cleaned or cleaned.startswith("@") or cleaned.endswith("@"):
+        raise _api_error(400, f"{key} must be valid")
+    return cleaned
+
+
+def _clean_text(value: Any, field_name: str) -> str:
+    if not isinstance(value, str):
+        raise _api_error(400, f"{field_name} must be text")
+
+    if any(unicodedata.category(character).startswith("C") for character in value):
+        raise _api_error(400, f"{field_name} contains invalid characters")
+
+    cleaned = value.strip()
+    if not cleaned:
+        raise _api_error(400, f"{field_name} is required")
+    if len(cleaned) > MAX_TEXT_LENGTH:
+        raise _api_error(400, f"{field_name} must be {MAX_TEXT_LENGTH} characters or fewer")
+    return cleaned
+
+
+def _read_optional_date(body: dict[str, Any], key: str) -> str | None:
+    if key not in body or body[key] is None:
+        return None
+    if not isinstance(body[key], str):
+        raise _api_error(400, f"{key} must be text")
+
+    cleaned = body[key].strip()
+    if not cleaned:
+        raise _api_error(400, f"{key} is required")
+    try:
+        date.fromisoformat(cleaned)
+    except ValueError as error:
+        raise _api_error(400, f"{key} must be a valid YYYY-MM-DD date") from error
+    return cleaned
 
 
 def _api_error(status_code: int, message: str) -> HTTPException:

@@ -15,7 +15,7 @@ class DatabaseTest(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_create_activity_with_roles_and_members(self):
-        activity = database.create_activity(self.db_path, " 朝会 ")
+        activity = database.create_activity(self.db_path, "朝会")
         role = database.add_role(self.db_path, activity["id"], "司会")
         member = database.add_member(
             self.db_path, activity["id"], "田中", "tanaka@example.com"
@@ -183,10 +183,6 @@ class DatabaseTest(unittest.TestCase):
 
         self.assertEqual(database.list_activities(self.db_path), [])
 
-    def test_rejects_blank_name(self):
-        with self.assertRaises(database.ValidationError):
-            database.create_activity(self.db_path, " ")
-
     def test_rejects_duplicate_role_in_activity(self):
         activity = database.create_activity(self.db_path, "朝会")
         database.add_role(self.db_path, activity["id"], "司会")
@@ -199,7 +195,7 @@ class DatabaseTest(unittest.TestCase):
         database.add_member(self.db_path, activity["id"], "田中", "same@example.com")
 
         with self.assertRaises(database.ValidationError):
-            database.add_member(self.db_path, activity["id"], "佐藤", "SAME@example.com")
+            database.add_member(self.db_path, activity["id"], "佐藤", "same@example.com")
 
 
 if __name__ == "__main__":
