@@ -61,7 +61,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
             f"/api/activities/{activity['id']}/assignments/dates/2026-05-24"
         )
         self.assertEqual(missing_assignments.status_code, 404)
-        self.assertEqual(missing_assignments.json(), {"error": "assignments not found"})
+        self.assertEqual(missing_assignments.json(), {"error": "この日の担当データはありません。"})
 
         await self.request_empty(
             "DELETE", f"/api/activities/{activity['id']}/assignments/{assignment['id']}"
@@ -79,12 +79,12 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         response = await self.client.post("/api/activities", json={"name": " "})
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {"error": "name is required"})
+        self.assertEqual(response.json(), {"error": "名前は必須です。"})
 
         too_long = await self.client.post("/api/activities", json={"name": "あ" * 145})
         self.assertEqual(too_long.status_code, 400)
         self.assertEqual(
-            too_long.json(), {"error": "name must be 144 characters or fewer"}
+            too_long.json(), {"error": "名前は144文字以内で入力してください。"}
         )
 
         invisible = await self.client.post(
@@ -92,7 +92,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(invisible.status_code, 400)
         self.assertEqual(
-            invisible.json(), {"error": "name contains invalid characters"}
+            invisible.json(), {"error": "名前に使用できない文字が含まれています。"}
         )
 
     async def test_role_and_member_text_validation_happens_in_api(self):
@@ -102,7 +102,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
             f"/api/activities/{activity['id']}/roles", json={"name": "発\u0007表"}
         )
         self.assertEqual(bad_role.status_code, 400)
-        self.assertEqual(bad_role.json(), {"error": "name contains invalid characters"})
+        self.assertEqual(bad_role.json(), {"error": "名前に使用できない文字が含まれています。"})
 
         bad_member_name = await self.client.post(
             f"/api/activities/{activity['id']}/members",
@@ -110,7 +110,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(bad_member_name.status_code, 400)
         self.assertEqual(
-            bad_member_name.json(), {"error": "name contains invalid characters"}
+            bad_member_name.json(), {"error": "名前に使用できない文字が含まれています。"}
         )
 
         bad_member_email = await self.client.post(
@@ -119,7 +119,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(bad_member_email.status_code, 400)
         self.assertEqual(
-            bad_member_email.json(), {"error": "email contains invalid characters"}
+            bad_member_email.json(), {"error": "メールアドレスに使用できない文字が含まれています。"}
         )
 
     async def test_duplicate_role_and_member_email_errors(self):
@@ -132,7 +132,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(duplicate_role.status_code, 400)
         self.assertEqual(
-            duplicate_role.json(), {"error": "role already exists in this activity"}
+            duplicate_role.json(), {"error": "このアクティビティには同じ役割が既にあります。"}
         )
 
         await self.request_json(
@@ -147,14 +147,15 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(duplicate_email.status_code, 400)
         self.assertEqual(
-            duplicate_email.json(), {"error": "email already exists in this activity"}
+            duplicate_email.json(),
+            {"error": "このアクティビティには同じメールアドレスのメンバーが既にいます。"},
         )
 
     async def test_invalid_id_returns_bad_request(self):
         response = await self.client.delete("/api/activities/not-a-number")
 
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json(), {"error": "invalid id"})
+        self.assertEqual(response.json(), {"error": "IDが正しくありません。"})
 
     async def test_assignment_validation_errors(self):
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
@@ -164,7 +165,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
             json={"member_id": 1, "assigned_on": "2026-05-23"},
         )
         self.assertEqual(missing_role.status_code, 400)
-        self.assertEqual(missing_role.json(), {"error": "role_id is required"})
+        self.assertEqual(missing_role.json(), {"error": "役割IDは必須です。"})
 
         bad_date = await self.client.post(
             f"/api/activities/{activity['id']}/assignments",
@@ -172,7 +173,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(bad_date.status_code, 400)
         self.assertEqual(
-            bad_date.json(), {"error": "assigned_on must be a valid YYYY-MM-DD date"}
+            bad_date.json(), {"error": "担当日はYYYY-MM-DD形式の正しい日付を入力してください。"}
         )
 
         bad_path_date = await self.client.get(
@@ -181,7 +182,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bad_path_date.status_code, 400)
         self.assertEqual(
             bad_path_date.json(),
-            {"error": "assigned_on must be a valid YYYY-MM-DD date"},
+            {"error": "担当日はYYYY-MM-DD形式の正しい日付を入力してください。"},
         )
 
     async def request_json(self, method, path, payload=None, expected_status=200):

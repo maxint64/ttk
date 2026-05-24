@@ -145,6 +145,16 @@ h1 {
   gap: 16px;
 }
 
+.error-message {
+  background: var(--danger-soft);
+  border: 1px solid #e8b8b3;
+  border-radius: 8px;
+  color: var(--danger);
+  font-weight: 700;
+  margin: -8px 0 0;
+  padding: 12px 14px;
+}
+
 .empty {
   border: 1px dashed var(--line);
   border-radius: 8px;

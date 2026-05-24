@@ -2,6 +2,7 @@ const activityForm = document.querySelector("#activityForm");
 const activityName = document.querySelector("#activityName");
 const activityList = document.querySelector("#activityList");
 const summaryText = document.querySelector("#summaryText");
+const errorMessage = document.querySelector("#errorMessage");
 const template = document.querySelector("#activityTemplate");
 const today = formatDate(new Date());
 
@@ -15,13 +16,18 @@ activityForm.addEventListener("submit", async (event) => {
 
   if (!name) return;
 
-  await apiRequest("/api/activities", {
-    method: "POST",
-    body: { name },
-  });
+  clearErrorMessage();
+  try {
+    await apiRequest("/api/activities", {
+      method: "POST",
+      body: { name },
+    });
 
-  activityName.value = "";
-  await loadAndRender();
+    activityName.value = "";
+    await loadAndRender();
+  } catch (error) {
+    showErrorMessage(error.message);
+  }
 });
 
 async function loadAndRender() {
@@ -30,7 +36,7 @@ async function loadAndRender() {
     activities = data.activities;
     render();
   } catch (error) {
-    renderError("データを読み込めませんでした。サーバーが起動しているか確認してください。");
+    renderError(error.message || "データを読み込めませんでした。サーバーが起動しているか確認してください。");
   }
 }
 
@@ -44,7 +50,13 @@ async function apiRequest(path, options = {}) {
     fetchOptions.body = JSON.stringify(options.body);
   }
 
-  const response = await fetch(path, fetchOptions);
+  let response;
+  try {
+    response = await fetch(path, fetchOptions);
+  } catch {
+    throw new Error("サーバーに接続できませんでした。時間をおいてもう一度お試しください。");
+  }
+
   if (!response.ok) {
     const message = await readErrorMessage(response);
     const error = new Error(message);
@@ -59,9 +71,9 @@ async function apiRequest(path, options = {}) {
 async function readErrorMessage(response) {
   try {
     const data = await response.json();
-    return data.error || "request failed";
+    return data.error || "リクエストに失敗しました。";
   } catch {
-    return "request failed";
+    return "リクエストに失敗しました。";
   }
 }
 
@@ -92,18 +104,24 @@ function render() {
     setupDateControls(node, activity, selectedDate);
 
     deleteButton.addEventListener("click", async () => {
-      await apiRequest(`/api/activities/${activity.id}`, { method: "DELETE" });
-      await loadAndRender();
+      try {
+        clearErrorMessage();
+        await apiRequest(`/api/activities/${activity.id}`, { method: "DELETE" });
+        await loadAndRender();
+      } catch (error) {
+        showErrorMessage(error.message);
+      }
     });
 
     roleForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const input = roleForm.elements.roleName;
       try {
+        clearErrorMessage();
         await addItem(activity.id, "roles", { name: input.value });
         input.value = "";
       } catch (error) {
-        alert(error.message);
+        showErrorMessage(error.message);
       }
     });
 
@@ -112,6 +130,7 @@ function render() {
       const nameInput = memberForm.elements.memberName;
       const emailInput = memberForm.elements.memberEmail;
       try {
+        clearErrorMessage();
         await addItem(activity.id, "members", {
           name: nameInput.value,
           email: emailInput.value,
@@ -119,7 +138,7 @@ function render() {
         nameInput.value = "";
         emailInput.value = "";
       } catch (error) {
-        alert(error.message);
+        showErrorMessage(error.message);
       }
     });
 
@@ -189,7 +208,14 @@ function renderItems(list, activity, key) {
     removeButton.type = "button";
     removeButton.textContent = "x";
     removeButton.setAttribute("aria-label", `${item.name}を削除`);
-    removeButton.addEventListener("click", () => removeItem(activity.id, key, item.id));
+    removeButton.addEventListener("click", async () => {
+      try {
+        clearErrorMessage();
+        await removeItem(activity.id, key, item.id);
+      } catch (error) {
+        showErrorMessage(error.message);
+      }
+    });
 
     chip.append(label, removeButton);
     list.append(chip);
@@ -214,7 +240,7 @@ function renderAssignmentTable(node, activity, selectedDate) {
   } else if (view.status === "missing") {
     empty.textContent = "この日の担当データはありません。";
   } else if (view.status === "error") {
-    empty.textContent = "担当データを読み込めませんでした。";
+    empty.textContent = view.message || "担当データを読み込めませんでした。";
   }
 
   const table = document.createElement("table");
@@ -257,7 +283,12 @@ function renderAssignmentTable(node, activity, selectedDate) {
         `${selectedDate}: ${member.name}が${role.name}を担当`
       );
       button.addEventListener("click", async () => {
-        await toggleAssignment(activity.id, selectedDate, role.id, member.id, assignment);
+        try {
+          clearErrorMessage();
+          await toggleAssignment(activity.id, selectedDate, role.id, member.id, assignment);
+        } catch (error) {
+          showErrorMessage(error.message);
+        }
       });
 
       td.append(button);
@@ -329,7 +360,11 @@ async function loadAssignmentsForDate(activityId, assignedOn) {
     if (error.status === 404) {
       assignmentViews.set(key, { status: "missing", assignments: [] });
     } else {
-      assignmentViews.set(key, { status: "error", assignments: [] });
+      assignmentViews.set(key, {
+        status: "error",
+        assignments: [],
+        message: error.message,
+      });
     }
   }
   render();
@@ -367,6 +402,16 @@ function renderError(message) {
   error.className = "empty";
   error.textContent = message;
   activityList.append(error);
+}
+
+function showErrorMessage(message) {
+  errorMessage.textContent = message || "エラーが発生しました。";
+  errorMessage.hidden = false;
+}
+
+function clearErrorMessage() {
+  errorMessage.textContent = "";
+  errorMessage.hidden = true;
 }
 
 loadAndRender();

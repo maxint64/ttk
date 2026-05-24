@@ -40,7 +40,9 @@ def create_app(
     async def validation_exception_handler(
         request: Request, error: RequestValidationError
     ) -> JSONResponse:
-        return JSONResponse({"error": "request body must be valid JSON"}, status_code=400)
+        return JSONResponse(
+            {"error": "リクエストのJSON形式が正しくありません。"}, status_code=400
+        )
 
     @app.get("/api/activities")
     async def list_activities() -> dict[str, list[dict[str, Any]]]:
@@ -155,7 +157,7 @@ def create_app(
 
     @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
     async def api_not_found(path: str) -> None:
-        raise _api_error(404, "not found")
+        raise _api_error(404, "対象が見つかりませんでした。")
 
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app
@@ -166,7 +168,7 @@ def _read_json_object(parsed: Any) -> dict[str, Any]:
         return {}
 
     if not isinstance(parsed, dict):
-        raise _api_error(400, "request body must be a JSON object")
+        raise _api_error(400, "リクエストの形式が正しくありません。")
     return parsed
 
 
@@ -196,12 +198,12 @@ def _parse_id(value: str) -> int:
     try:
         return int(value)
     except ValueError as error:
-        raise _api_error(400, "invalid id") from error
+        raise _api_error(400, "IDが正しくありません。") from error
 
 
 def _read_body_id(body: dict[str, Any], key: str) -> int:
     if key not in body:
-        raise _api_error(400, f"{key} is required")
+        raise _api_error(400, f"{_field_label(key)}は必須です。")
     return _parse_id(str(body[key]))
 
 
@@ -212,22 +214,24 @@ def _read_text(body: dict[str, Any], key: str) -> str:
 def _read_email(body: dict[str, Any], key: str) -> str:
     cleaned = _clean_text(body.get(key, ""), key).lower()
     if "@" not in cleaned or cleaned.startswith("@") or cleaned.endswith("@"):
-        raise _api_error(400, f"{key} must be valid")
+        raise _api_error(400, f"{_field_label(key)}は正しい形式で入力してください。")
     return cleaned
 
 
 def _clean_text(value: Any, field_name: str) -> str:
     if not isinstance(value, str):
-        raise _api_error(400, f"{field_name} must be text")
+        raise _api_error(400, f"{_field_label(field_name)}は文字列で入力してください。")
 
     if any(unicodedata.category(character).startswith("C") for character in value):
-        raise _api_error(400, f"{field_name} contains invalid characters")
+        raise _api_error(400, f"{_field_label(field_name)}に使用できない文字が含まれています。")
 
     cleaned = value.strip()
     if not cleaned:
-        raise _api_error(400, f"{field_name} is required")
+        raise _api_error(400, f"{_field_label(field_name)}は必須です。")
     if len(cleaned) > MAX_TEXT_LENGTH:
-        raise _api_error(400, f"{field_name} must be {MAX_TEXT_LENGTH} characters or fewer")
+        raise _api_error(
+            400, f"{_field_label(field_name)}は{MAX_TEXT_LENGTH}文字以内で入力してください。"
+        )
     return cleaned
 
 
@@ -235,23 +239,36 @@ def _read_optional_date(body: dict[str, Any], key: str) -> str | None:
     if key not in body or body[key] is None:
         return None
     if not isinstance(body[key], str):
-        raise _api_error(400, f"{key} must be text")
+        raise _api_error(400, f"{_field_label(key)}は文字列で入力してください。")
     return _clean_date(body[key], key)
 
 
 def _clean_date(value: str, field_name: str) -> str:
     cleaned = value.strip()
     if not cleaned:
-        raise _api_error(400, f"{field_name} is required")
+        raise _api_error(400, f"{_field_label(field_name)}は必須です。")
     try:
         date.fromisoformat(cleaned)
     except ValueError as error:
-        raise _api_error(400, f"{field_name} must be a valid YYYY-MM-DD date") from error
+        raise _api_error(
+            400, f"{_field_label(field_name)}はYYYY-MM-DD形式の正しい日付を入力してください。"
+        ) from error
     return cleaned
 
 
 def _api_error(status_code: int, message: str) -> HTTPException:
     return HTTPException(status_code=status_code, detail={"error": message})
+
+
+def _field_label(field_name: str) -> str:
+    labels = {
+        "assigned_on": "担当日",
+        "email": "メールアドレス",
+        "member_id": "メンバーID",
+        "name": "名前",
+        "role_id": "役割ID",
+    }
+    return labels.get(field_name, field_name)
 
 
 def run(host: str = "127.0.0.1", port: int = 8000, db_path: Path = DEFAULT_DB_PATH) -> None:

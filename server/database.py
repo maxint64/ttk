@@ -115,14 +115,14 @@ def delete_activity(db_path: str | Path, activity_id: int) -> None:
     with connect(db_path) as connection:
         cursor = connection.execute("DELETE FROM activities WHERE id = ?", (activity_id,))
         if cursor.rowcount == 0:
-            raise NotFoundError("activity not found")
+            raise NotFoundError("アクティビティが見つかりませんでした。")
 
 
 def add_role(db_path: str | Path, activity_id: int, name: str) -> dict[str, Any]:
     with connect(db_path) as connection:
         _require_activity(connection, activity_id)
         if _item_exists(connection, "roles", activity_id, "name", name):
-            raise ValidationError("role already exists in this activity")
+            raise ValidationError("このアクティビティには同じ役割が既にあります。")
 
         try:
             cursor = connection.execute(
@@ -130,7 +130,7 @@ def add_role(db_path: str | Path, activity_id: int, name: str) -> dict[str, Any]
                 (activity_id, name),
             )
         except sqlite3.IntegrityError as error:
-            raise ValidationError("role already exists in this activity") from error
+            raise ValidationError("このアクティビティには同じ役割が既にあります。") from error
 
         role_id = cursor.lastrowid
         row = connection.execute(
@@ -146,7 +146,7 @@ def add_member(
     with connect(db_path) as connection:
         _require_activity(connection, activity_id)
         if _item_exists(connection, "members", activity_id, "email", email):
-            raise ValidationError("email already exists in this activity")
+            raise ValidationError("このアクティビティには同じメールアドレスのメンバーが既にいます。")
 
         try:
             cursor = connection.execute(
@@ -154,7 +154,9 @@ def add_member(
                 (activity_id, name, email),
             )
         except sqlite3.IntegrityError as error:
-            raise ValidationError("email already exists in this activity") from error
+            raise ValidationError(
+                "このアクティビティには同じメールアドレスのメンバーが既にいます。"
+            ) from error
 
         member_id = cursor.lastrowid
         row = connection.execute(
@@ -195,7 +197,7 @@ def list_assignments_on(
         ).fetchall()
 
     if not rows:
-        raise NotFoundError("assignments not found")
+        raise NotFoundError("この日の担当データはありません。")
     return [dict(row) for row in rows]
 
 
@@ -210,10 +212,10 @@ def add_assignment(
     with connect(db_path) as connection:
         _require_activity(connection, activity_id)
         _require_activity_item(
-            connection, "roles", activity_id, role_id, "role not found"
+            connection, "roles", activity_id, role_id, "役割が見つかりませんでした。"
         )
         _require_activity_item(
-            connection, "members", activity_id, member_id, "member not found"
+            connection, "members", activity_id, member_id, "メンバーが見つかりませんでした。"
         )
 
         connection.execute(
@@ -314,7 +316,7 @@ def delete_assignment(db_path: str | Path, activity_id: int, assignment_id: int)
             (assignment_id, activity_id),
         )
         if cursor.rowcount == 0:
-            raise NotFoundError("assignment not found")
+            raise NotFoundError("担当が見つかりませんでした。")
 
 
 def get_activity(db_path: str | Path, activity_id: int) -> dict[str, Any]:
@@ -322,7 +324,7 @@ def get_activity(db_path: str | Path, activity_id: int) -> dict[str, Any]:
     for activity in activities:
         if activity["id"] == activity_id:
             return activity
-    raise NotFoundError("activity not found")
+    raise NotFoundError("アクティビティが見つかりませんでした。")
 
 
 def _group_items(connection: sqlite3.Connection, table: str) -> dict[int, list[dict[str, Any]]]:
@@ -369,7 +371,7 @@ def _delete_activity_item(
             (item_id, activity_id),
         )
         if cursor.rowcount == 0:
-            raise NotFoundError("item not found")
+            raise NotFoundError("項目が見つかりませんでした。")
 
 
 def _require_activity(connection: sqlite3.Connection, activity_id: int) -> None:
@@ -377,7 +379,7 @@ def _require_activity(connection: sqlite3.Connection, activity_id: int) -> None:
         "SELECT id FROM activities WHERE id = ?", (activity_id,)
     ).fetchone()
     if activity is None:
-        raise NotFoundError("activity not found")
+        raise NotFoundError("アクティビティが見つかりませんでした。")
 
 
 def _require_activity_item(
@@ -433,12 +435,12 @@ def _clean_assigned_on(value: str | None) -> str:
 
     cleaned = value.strip()
     if not cleaned:
-        raise ValidationError("assigned_on is required")
+        raise ValidationError("担当日は必須です。")
 
     try:
         date.fromisoformat(cleaned)
     except ValueError as error:
-        raise ValidationError("assigned_on must be a valid YYYY-MM-DD date") from error
+        raise ValidationError("担当日はYYYY-MM-DD形式の正しい日付を入力してください。") from error
     return cleaned
 
 
