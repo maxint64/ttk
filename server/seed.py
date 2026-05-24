@@ -14,11 +14,11 @@ def reset_and_seed(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     database.init_db(db_path)
 
     standup = database.create_activity(db_path, "朝会")
-    facilitator = database.add_role(db_path, standup["id"], "司会")
-    note_taker = database.add_role(db_path, standup["id"], "記録")
     tanaka = database.add_member(db_path, standup["id"], "田中", "tanaka@example.com")
     sato = database.add_member(db_path, standup["id"], "佐藤", "sato@example.com")
     suzuki = database.add_member(db_path, standup["id"], "鈴木", "suzuki@example.com")
+    facilitator = database.add_role(db_path, standup["id"], "司会")
+    note_taker = database.add_role(db_path, standup["id"], "記録")
     database.add_assignment(
         db_path, standup["id"], facilitator["id"], tanaka["id"], "2026-05-22"
     )
@@ -33,10 +33,10 @@ def reset_and_seed(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     )
 
     cleanup = database.create_activity(db_path, "掃除当番")
-    floor = database.add_role(db_path, cleanup["id"], "床")
-    trash = database.add_role(db_path, cleanup["id"], "ゴミ出し")
     yamada = database.add_member(db_path, cleanup["id"], "山田", "yamada@example.com")
     ito = database.add_member(db_path, cleanup["id"], "伊藤", "ito@example.com")
+    floor = database.add_role(db_path, cleanup["id"], "床")
+    trash = database.add_role(db_path, cleanup["id"], "ゴミ出し")
     database.add_assignment(
         db_path, cleanup["id"], floor["id"], yamada["id"], "2026-05-23"
     )

@@ -21,14 +21,14 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_activity_role_member_flow(self):
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
-        role = await self.request_json(
-            "POST", f"/api/activities/{activity['id']}/roles", {"name": "発表"}, 201
-        )
         member = await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/members",
             {"name": "山田", "email": "yamada@example.com"},
             201,
+        )
+        role = await self.request_json(
+            "POST", f"/api/activities/{activity['id']}/roles", {"name": "発表"}, 201
         )
         assignment = await self.request_json(
             "POST",
@@ -125,6 +125,12 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
     async def test_duplicate_role_and_member_email_errors(self):
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
         await self.request_json(
+            "POST",
+            f"/api/activities/{activity['id']}/members",
+            {"name": "田中", "email": "tanaka@example.com"},
+            201,
+        )
+        await self.request_json(
             "POST", f"/api/activities/{activity['id']}/roles", {"name": "発表"}, 201
         )
         duplicate_role = await self.client.post(
@@ -133,6 +139,15 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(duplicate_role.status_code, 400)
         self.assertEqual(
             duplicate_role.json(), {"error": "このアクティビティには同じ役割が既にあります。"}
+        )
+
+        insufficient_members = await self.client.post(
+            f"/api/activities/{activity['id']}/roles", json={"name": "記録"}
+        )
+        self.assertEqual(insufficient_members.status_code, 400)
+        self.assertEqual(
+            insufficient_members.json(),
+            {"error": "役割を追加するにはメンバーを追加してください。"},
         )
 
         await self.request_json(

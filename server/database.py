@@ -123,6 +123,10 @@ def add_role(db_path: str | Path, activity_id: int, name: str) -> dict[str, Any]
         _require_activity(connection, activity_id)
         if _item_exists(connection, "roles", activity_id, "name", name):
             raise ValidationError("このアクティビティには同じ役割が既にあります。")
+        if _item_count(connection, "roles", activity_id) + 1 > _item_count(
+            connection, "members", activity_id
+        ):
+            raise ValidationError("役割を追加するにはメンバーを追加してください。")
 
         try:
             cursor = connection.execute(
@@ -405,6 +409,14 @@ def _item_exists(
         (activity_id, value),
     ).fetchone()
     return row is not None
+
+
+def _item_count(connection: sqlite3.Connection, table: str, activity_id: int) -> int:
+    row = connection.execute(
+        f"SELECT COUNT(*) AS count FROM {table} WHERE activity_id = ?",
+        (activity_id,),
+    ).fetchone()
+    return int(row["count"])
 
 
 def _assignment_exists(

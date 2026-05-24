@@ -29,15 +29,6 @@ class ApiIntegrationTest(unittest.IsolatedAsyncioTestCase):
             activity = await self.request_json(
                 "POST", "/api/activities", {"name": f"活動{activity_index + 1}"}, 201
             )
-            roles = [
-                await self.request_json(
-                    "POST",
-                    f"/api/activities/{activity['id']}/roles",
-                    {"name": f"役割{role_index + 1}"},
-                    201,
-                )
-                for role_index in range(5)
-            ]
             members = [
                 await self.request_json(
                     "POST",
@@ -52,6 +43,15 @@ class ApiIntegrationTest(unittest.IsolatedAsyncioTestCase):
                     201,
                 )
                 for member_index in range(5)
+            ]
+            roles = [
+                await self.request_json(
+                    "POST",
+                    f"/api/activities/{activity['id']}/roles",
+                    {"name": f"役割{role_index + 1}"},
+                    201,
+                )
+                for role_index in range(5)
             ]
 
             for role_index, role in enumerate(roles):
