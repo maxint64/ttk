@@ -155,6 +155,35 @@ h1 {
   padding: 12px 14px;
 }
 
+.update-notice {
+  align-items: center;
+  background: #fff7dc;
+  border: 1px solid #e3c46f;
+  border-radius: 8px;
+  color: #5c4516;
+  display: flex;
+  font-weight: 700;
+  gap: 14px;
+  justify-content: space-between;
+  margin: -8px 0 0;
+  padding: 12px 14px;
+}
+
+.update-notice[hidden] {
+  display: none;
+}
+
+.update-notice button {
+  background: #76510f;
+  min-height: 36px;
+  padding: 0 14px;
+  white-space: nowrap;
+}
+
+.update-notice button:hover {
+  background: #5c3d09;
+}
+
 .empty {
   border: 1px dashed var(--line);
   border-radius: 8px;
@@ -458,6 +487,11 @@ h1 {
 
   .assignment-cell {
     width: 100%;
+  }
+
+  .update-notice {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .chip button {

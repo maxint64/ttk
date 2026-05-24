@@ -10,6 +10,8 @@ const activityName = document.querySelector("#activityName");
 const activityList = document.querySelector("#activityList");
 const summaryText = document.querySelector("#summaryText");
 const errorMessage = document.querySelector("#errorMessage");
+const updateNotice = document.querySelector("#updateNotice");
+const updateNoticeButton = document.querySelector("#updateNoticeButton");
 const template = document.querySelector("#activityTemplate");
 
 export function setupCreateForm(onCreateActivity) {
@@ -25,6 +27,22 @@ export function setupCreateForm(onCreateActivity) {
       activityName.value = "";
     } catch (error) {
       showErrorMessage(error.message);
+    }
+  });
+}
+
+export function setupUpdateNotice(onConfirmUpdate) {
+  updateNoticeButton.addEventListener("click", async () => {
+    clearErrorMessage();
+    updateNoticeButton.disabled = true;
+    updateNoticeButton.textContent = "更新中";
+    try {
+      await onConfirmUpdate();
+    } catch (error) {
+      showErrorMessage(error.message);
+    } finally {
+      updateNoticeButton.disabled = false;
+      updateNoticeButton.textContent = "最新情報を表示";
     }
   });
 }
@@ -123,6 +141,21 @@ export function clearErrorMessage() {
   errorMessage.hidden = true;
 }
 
+export function showUpdateNotice() {
+  updateNotice.hidden = false;
+}
+
+export function hideUpdateNotice() {
+  updateNotice.hidden = true;
+}
+
+export function hasPendingUserInput() {
+  const active = document.activeElement;
+  if (isEditableInput(active)) return true;
+  return Array.from(document.querySelectorAll(".create-form input, .mini-form input"))
+    .some((input) => input.value.trim() !== "");
+}
+
 function setupDateControls(node, activity, selectedDate, handlers) {
   const previousButton = node.querySelector(".date-previous");
   const todayButton = node.querySelector(".date-today");
@@ -144,6 +177,17 @@ function setupDateControls(node, activity, selectedDate, handlers) {
       handlers.onSelectAssignmentDate(activity.id, dateInput.value);
     }
   });
+}
+
+function isEditableInput(element) {
+  return (
+    element instanceof HTMLInputElement &&
+    (
+      element.closest(".create-form") ||
+      element.closest(".mini-form") ||
+      element.classList.contains("assignment-date-input")
+    )
+  );
 }
 
 function renderItems(list, activity, key, handlers) {

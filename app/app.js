@@ -9,9 +9,13 @@ import {
   setSelectedDate,
 } from "./state.js";
 import {
+  hasPendingUserInput,
+  hideUpdateNotice,
   render,
   renderError,
   setupCreateForm,
+  setupUpdateNotice,
+  showUpdateNotice,
 } from "./ui.js";
 
 const handlers = {
@@ -23,7 +27,10 @@ const handlers = {
   onToggleAssignment: toggleAssignment,
 };
 
+let hasPendingRemoteAssignmentUpdate = false;
+
 setupCreateForm(createActivity);
+setupUpdateNotice(applyRemoteAssignmentUpdate);
 loadAndRender();
 setupRealtimeUpdates();
 
@@ -48,12 +55,35 @@ async function loadAndRender() {
 function setupRealtimeUpdates() {
   const source = new EventSource("/api/events");
   source.addEventListener("message", async (event) => {
-    const payload = JSON.parse(event.data);
+    let payload;
+    try {
+      payload = JSON.parse(event.data);
+    } catch {
+      return;
+    }
     if (payload.type !== "assignments_changed") return;
 
-    clearAssignmentViews();
-    await loadAndRender();
+    await handleRemoteAssignmentUpdate();
   });
+}
+
+async function handleRemoteAssignmentUpdate() {
+  hasPendingRemoteAssignmentUpdate = true;
+  if (hasPendingUserInput()) {
+    showUpdateNotice();
+    return;
+  }
+
+  await applyRemoteAssignmentUpdate();
+}
+
+async function applyRemoteAssignmentUpdate() {
+  if (!hasPendingRemoteAssignmentUpdate) return;
+
+  hasPendingRemoteAssignmentUpdate = false;
+  hideUpdateNotice();
+  clearAssignmentViews();
+  await loadAndRender();
 }
 
 async function deleteActivity(activityId) {
