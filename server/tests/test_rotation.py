@@ -1,6 +1,8 @@
 import argparse
+import io
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 from server import database, rotation
@@ -36,6 +38,32 @@ class RotationTest(unittest.TestCase):
             self.assertEqual(len(created), 1)
             self.assertEqual(created[0]["assigned_on"], "2026-05-24")
             self.assertEqual(created[0]["member_id"], second["id"])
+
+    def test_run_logs_rotated_assignment_details(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            db_path = Path(temp_dir) / "test.sqlite3"
+            database.init_db(db_path)
+            activity = database.create_activity(db_path, "朝会")
+            first = database.add_member(
+                db_path, activity["id"], "田中", "tanaka@example.com"
+            )
+            database.add_member(db_path, activity["id"], "佐藤", "sato@example.com")
+            role = database.add_role(db_path, activity["id"], "司会")
+            database.add_assignment(
+                db_path, activity["id"], role["id"], first["id"], "2026-05-23"
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                rotation.run(db_path, "2026-05-24")
+
+            self.assertEqual(
+                output.getvalue().splitlines(),
+                [
+                    "rotated 1 assignments",
+                    "2026-05-24 朝会 / 司会 -> 佐藤 <sato@example.com>",
+                ],
+            )
 
     def test_rotate_once_handles_role_member_count_combinations(self):
         counts = [1, 2, 3, 5]
@@ -74,23 +102,36 @@ class RotationTest(unittest.TestCase):
                                 "2026-05-23",
                             )
 
-                        created = rotation.rotate_once(db_path, "2026-05-24")
+                        rotation_dates = [
+                            "2026-05-24",
+                            "2026-05-25",
+                            "2026-05-26",
+                            "2026-05-27",
+                            "2026-05-28",
+                        ]
 
-                        self.assertEqual(len(created), role_count)
-                        created_by_role = {
-                            assignment["role_id"]: assignment for assignment in created
-                        }
-                        self.assertEqual(set(created_by_role), {role["id"] for role in roles})
-                        for index, role in enumerate(roles):
-                            expected_member = members[(index + 1) % member_count]
+                        for day_offset, target_on in enumerate(rotation_dates, start=1):
+                            created = rotation.rotate_once(db_path, target_on)
+
+                            self.assertEqual(len(created), role_count)
+                            created_by_role = {
+                                assignment["role_id"]: assignment for assignment in created
+                            }
                             self.assertEqual(
-                                created_by_role[role["id"]]["member_id"],
-                                expected_member["id"],
+                                set(created_by_role), {role["id"] for role in roles}
                             )
-                            self.assertEqual(
-                                created_by_role[role["id"]]["assigned_on"],
-                                "2026-05-24",
-                            )
+                            for role_index, role in enumerate(roles):
+                                expected_member = members[
+                                    (role_index + day_offset) % member_count
+                                ]
+                                self.assertEqual(
+                                    created_by_role[role["id"]]["member_id"],
+                                    expected_member["id"],
+                                )
+                                self.assertEqual(
+                                    created_by_role[role["id"]]["assigned_on"],
+                                    target_on,
+                                )
 
     def test_valid_date_rejects_invalid_date(self):
         with self.assertRaises(argparse.ArgumentTypeError):

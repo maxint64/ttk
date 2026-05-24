@@ -313,6 +313,36 @@ def rotate_assignments(db_path: str | Path, target_on: str | None = None) -> lis
     return created
 
 
+def describe_assignments(
+    db_path: str | Path, assignment_ids: list[int]
+) -> list[dict[str, Any]]:
+    if not assignment_ids:
+        return []
+
+    placeholders = ", ".join("?" for _ in assignment_ids)
+    with connect(db_path) as connection:
+        rows = connection.execute(
+            f"""
+            SELECT
+                role_assignments.id,
+                role_assignments.assigned_on,
+                activities.name AS activity_name,
+                roles.name AS role_name,
+                members.name AS member_name,
+                members.email AS member_email
+            FROM role_assignments
+            JOIN activities ON activities.id = role_assignments.activity_id
+            JOIN roles ON roles.id = role_assignments.role_id
+            JOIN members ON members.id = role_assignments.member_id
+            WHERE role_assignments.id IN ({placeholders})
+            """,
+            assignment_ids,
+        ).fetchall()
+
+    by_id = {row["id"]: dict(row) for row in rows}
+    return [by_id[assignment_id] for assignment_id in assignment_ids if assignment_id in by_id]
+
+
 def delete_assignment(db_path: str | Path, activity_id: int, assignment_id: int) -> None:
     with connect(db_path) as connection:
         cursor = connection.execute(
