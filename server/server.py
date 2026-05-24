@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import atexit
+import os
 import unicodedata
 from datetime import date
 from pathlib import Path
@@ -11,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
-from .config import DEFAULT_DB_PATH, DEFAULT_STATIC_DIR
+from .config import DEFAULT_DB_PATH, DEFAULT_PID_PATH, DEFAULT_STATIC_DIR
 from . import database
 
 
@@ -271,10 +273,30 @@ def _field_label(field_name: str) -> str:
     return labels.get(field_name, field_name)
 
 
-def run(host: str = "127.0.0.1", port: int = 8000, db_path: Path = DEFAULT_DB_PATH) -> None:
+def run(
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    db_path: Path = DEFAULT_DB_PATH,
+    pid_path: Path = DEFAULT_PID_PATH,
+) -> None:
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    write_pid_file(pid_path)
     print(f"ttk is running at http://{host}:{port}")
     uvicorn.run(create_app(db_path), host=host, port=port)
+
+
+def write_pid_file(pid_path: Path) -> None:
+    pid_path.parent.mkdir(parents=True, exist_ok=True)
+    pid_path.write_text(f"{os.getpid()}\n", encoding="utf-8")
+
+    def remove_pid_file() -> None:
+        try:
+            if pid_path.read_text(encoding="utf-8").strip() == str(os.getpid()):
+                pid_path.unlink()
+        except OSError:
+            pass
+
+    atexit.register(remove_pid_file)
 
 
 if __name__ == "__main__":
