@@ -23,6 +23,7 @@ class ApiIntegrationTest(unittest.IsolatedAsyncioTestCase):
         self.temp_dir.cleanup()
 
     async def test_large_rotation_scenario_through_api(self):
+        """複数活動をAPIで作成し5日分のローテーション結果を確認する"""
         activities = []
 
         for activity_index in range(10):

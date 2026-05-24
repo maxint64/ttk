@@ -20,6 +20,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         self.temp_dir.cleanup()
 
     async def test_activity_role_member_flow(self):
+        """APIで活動・メンバー・役割・担当を作成して削除できる"""
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
         member = await self.request_json(
             "POST",
@@ -76,6 +77,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(index["activities"], [])
 
     async def test_validation_errors_keep_existing_shape(self):
+        """活動名の入力エラーは日本語のerrorレスポンスで返す"""
         response = await self.client.post("/api/activities", json={"name": " "})
 
         self.assertEqual(response.status_code, 400)
@@ -96,6 +98,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_role_and_member_text_validation_happens_in_api(self):
+        """役割名とメンバー情報の文字種検証をAPI層で行う"""
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
 
         bad_role = await self.client.post(
@@ -123,6 +126,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_duplicate_role_and_member_email_errors(self):
+        """重複役割・メンバー不足・重複メールをAPIエラーにする"""
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
         await self.request_json(
             "POST",
@@ -167,12 +171,14 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_invalid_id_returns_bad_request(self):
+        """不正なIDは400エラーとして返す"""
         response = await self.client.delete("/api/activities/not-a-number")
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json(), {"error": "IDが正しくありません。"})
 
     async def test_assignment_validation_errors(self):
+        """担当作成と日付指定の入力エラーを日本語で返す"""
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
 
         missing_role = await self.client.post(

@@ -15,6 +15,7 @@ class DatabaseTest(unittest.TestCase):
         self.temp_dir.cleanup()
 
     def test_create_activity_with_roles_and_members(self):
+        """アクティビティに役割とメンバーを追加して一覧で確認できる"""
         activity = database.create_activity(self.db_path, "朝会")
         member = database.add_member(
             self.db_path, activity["id"], "田中", "tanaka@example.com"
@@ -30,6 +31,7 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(activities[0]["assignments"], [])
 
     def test_add_role_does_not_assign_member(self):
+        """役割を追加しただけでは担当は自動作成されない"""
         activity = database.create_activity(self.db_path, "朝会")
         database.add_member(self.db_path, activity["id"], "田中", "tanaka@example.com")
 
@@ -40,6 +42,7 @@ class DatabaseTest(unittest.TestCase):
         )
 
     def test_create_and_list_assignments(self):
+        """担当を作成して一覧とアクティビティ詳細から取得できる"""
         activity = database.create_activity(self.db_path, "朝会")
         member = database.add_member(
             self.db_path, activity["id"], "田中", "tanaka@example.com"
@@ -74,6 +77,7 @@ class DatabaseTest(unittest.TestCase):
         )
 
     def test_list_assignments_on_returns_selected_day_or_not_found(self):
+        """指定日の担当だけを取得し、存在しない日は未検出にする"""
         activity = database.create_activity(self.db_path, "朝会")
         member = database.add_member(
             self.db_path, activity["id"], "田中", "tanaka@example.com"
@@ -91,6 +95,7 @@ class DatabaseTest(unittest.TestCase):
             database.list_assignments_on(self.db_path, activity["id"], "2026-05-24")
 
     def test_assignment_replaces_role_member_for_same_day(self):
+        """同じ日付と役割の担当は新しいメンバーで置き換える"""
         activity = database.create_activity(self.db_path, "朝会")
         first = database.add_member(
             self.db_path, activity["id"], "田中", "tanaka@example.com"
@@ -112,6 +117,7 @@ class DatabaseTest(unittest.TestCase):
         )
 
     def test_rotate_assignments_moves_to_next_member(self):
+        """ローテーションで担当者が次のメンバーへ進む"""
         activity = database.create_activity(self.db_path, "朝会")
         first = database.add_member(
             self.db_path, activity["id"], "田中", "tanaka@example.com"
@@ -132,6 +138,7 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(created[0]["assigned_on"], "2026-05-24")
 
     def test_rotate_assignments_wraps_last_member_to_first(self):
+        """最後のメンバーの次は最初のメンバーに戻る"""
         activity = database.create_activity(self.db_path, "朝会")
         first = database.add_member(
             self.db_path, activity["id"], "田中", "tanaka@example.com"
@@ -149,6 +156,7 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(created[0]["member_id"], first["id"])
 
     def test_rotate_assignments_skips_roles_without_manual_assignment(self):
+        """過去の担当がない役割はローテーション対象にしない"""
         activity = database.create_activity(self.db_path, "朝会")
         database.add_member(self.db_path, activity["id"], "田中", "tanaka@example.com")
         database.add_role(self.db_path, activity["id"], "司会")
@@ -157,6 +165,7 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(database.list_assignments(self.db_path, activity["id"]), [])
 
     def test_rotate_assignments_keeps_existing_target_day_assignment(self):
+        """対象日に既に担当がある場合は上書きしない"""
         activity = database.create_activity(self.db_path, "朝会")
         first = database.add_member(
             self.db_path, activity["id"], "田中", "tanaka@example.com"
@@ -178,6 +187,7 @@ class DatabaseTest(unittest.TestCase):
         )
 
     def test_assignment_requires_role_and_member_in_activity(self):
+        """担当には同じアクティビティの役割とメンバーが必要"""
         activity = database.create_activity(self.db_path, "朝会")
         other_activity = database.create_activity(self.db_path, "掃除当番")
         database.add_member(self.db_path, other_activity["id"], "佐藤", "sato@example.com")
@@ -192,6 +202,7 @@ class DatabaseTest(unittest.TestCase):
             )
 
     def test_delete_activity_cascades_children(self):
+        """アクティビティ削除で役割・メンバー・担当も削除される"""
         activity = database.create_activity(self.db_path, "掃除当番")
         member = database.add_member(
             self.db_path, activity["id"], "佐藤", "sato@example.com"
@@ -206,6 +217,7 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(database.list_activities(self.db_path), [])
 
     def test_rejects_duplicate_role_in_activity(self):
+        """同じアクティビティに同名の役割は追加できない"""
         activity = database.create_activity(self.db_path, "朝会")
         database.add_member(self.db_path, activity["id"], "田中", "tanaka@example.com")
         database.add_role(self.db_path, activity["id"], "司会")
@@ -214,6 +226,7 @@ class DatabaseTest(unittest.TestCase):
             database.add_role(self.db_path, activity["id"], "司会")
 
     def test_rejects_role_when_members_are_insufficient(self):
+        """メンバー数を超える役割は追加できない"""
         activity = database.create_activity(self.db_path, "朝会")
 
         with self.assertRaisesRegex(
@@ -223,6 +236,7 @@ class DatabaseTest(unittest.TestCase):
             database.add_role(self.db_path, activity["id"], "司会")
 
     def test_rejects_duplicate_member_email_in_activity(self):
+        """同じアクティビティに同じメールアドレスは追加できない"""
         activity = database.create_activity(self.db_path, "朝会")
         database.add_member(self.db_path, activity["id"], "田中", "same@example.com")
 

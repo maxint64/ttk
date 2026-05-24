@@ -8,6 +8,7 @@ from server import stop
 
 class StopTest(unittest.TestCase):
     def test_reads_live_server_pid_from_pid_file(self):
+        """PIDファイルにある稼働中サーバーのPIDを停止対象にする"""
         with tempfile.TemporaryDirectory() as temp_dir:
             pid_path = Path(temp_dir) / "ttk.pid"
             pid_path.write_text("12345\n", encoding="utf-8")
@@ -21,6 +22,7 @@ class StopTest(unittest.TestCase):
             self.assertTrue(pid_path.exists())
 
     def test_removes_stale_pid_file(self):
+        """存在しないプロセスのPIDファイルは古いものとして削除する"""
         with tempfile.TemporaryDirectory() as temp_dir:
             pid_path = Path(temp_dir) / "ttk.pid"
             pid_path.write_text("12345\n", encoding="utf-8")

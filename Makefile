@@ -1,24 +1,25 @@
 .PHONY: help sync dev stop test check-js clean clean-data seed rotate docker-up docker-down docker-seed docker-rotate
 
 PYTHON := uv run python
-TEST_CMD := $(PYTHON) -m unittest discover -s server/tests -t .
+VERBOSE_ARGS := $(if $(VERBOSE),-v,)
+TEST_CMD := $(PYTHON) -m unittest discover $(VERBOSE_ARGS) -s server/tests -t .
 ROTATE_ARGS := $(if $(DATE),--date $(DATE),)
 
 help:
-	@printf "Available targets:\n"
-	@printf "  make sync        Install/update Python dependencies\n"
-	@printf "  make dev         Start the local development server\n"
-	@printf "  make stop        Stop the local development server, then remove generated Python files\n"
-	@printf "  make test        Run backend tests, then remove generated Python files\n"
-	@printf "  make check-js    Check frontend JavaScript syntax\n"
-	@printf "  make clean       Remove generated Python files\n"
-	@printf "  make clean-data  Remove the local SQLite database\n"
-	@printf "  make seed        Reset the local SQLite database and insert test data\n"
-	@printf "  make rotate      Run rotation once. Use DATE=YYYY-MM-DD to target a date\n"
-	@printf "  make docker-up   Build and start Docker services\n"
-	@printf "  make docker-down Stop Docker services\n"
-	@printf "  make docker-seed Reset the Docker SQLite database and insert test data\n"
-	@printf "  make docker-rotate Run rotation once through Docker Compose. Use DATE=YYYY-MM-DD to target a date\n"
+	@printf "利用できるターゲット:\n"
+	@printf "  make sync        Python依存関係をインストール/更新する\n"
+	@printf "  make dev         ローカル開発サーバーを起動する\n"
+	@printf "  make stop        ローカル開発サーバーを停止し、生成されたPythonファイルを削除する\n"
+	@printf "  make test        バックエンドテストを実行し、生成されたPythonファイルを削除する。説明文を表示するには VERBOSE=1 を指定\n"
+	@printf "  make check-js    フロントエンドJavaScriptの構文をチェックする\n"
+	@printf "  make clean       生成されたPythonファイルを削除する\n"
+	@printf "  make clean-data  ローカルSQLiteデータベースを削除する\n"
+	@printf "  make seed        ローカルSQLiteデータベースを初期化し、テストデータを投入する\n"
+	@printf "  make rotate      ローテーションを1回実行する。対象日を指定するには DATE=YYYY-MM-DD を指定\n"
+	@printf "  make docker-up   Dockerサービスをビルドして起動する\n"
+	@printf "  make docker-down Dockerサービスを停止する\n"
+	@printf "  make docker-seed DockerのSQLiteデータベースを初期化し、テストデータを投入する\n"
+	@printf "  make docker-rotate Docker Compose経由でローテーションを1回実行する。対象日を指定するには DATE=YYYY-MM-DD を指定\n"
 
 sync:
 	uv sync

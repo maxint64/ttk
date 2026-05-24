@@ -12,6 +12,7 @@ from server.run_rotation import valid_date
 
 class RotationTest(unittest.TestCase):
     def test_rotate_once_initializes_database(self):
+        """ローテーション実行時にDBが未作成なら初期化する"""
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "test.sqlite3"
 
@@ -19,6 +20,7 @@ class RotationTest(unittest.TestCase):
             self.assertTrue(db_path.exists())
 
     def test_rotate_once_can_target_date(self):
+        """指定日のローテーションで次の担当者を作成する"""
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "test.sqlite3"
             database.init_db(db_path)
@@ -41,6 +43,7 @@ class RotationTest(unittest.TestCase):
             self.assertEqual(created[0]["member_id"], second["id"])
 
     def test_run_logs_rotated_assignment_details(self):
+        """ローカル実行時に更新された担当者情報をログ出力する"""
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "test.sqlite3"
             database.init_db(db_path)
@@ -71,6 +74,7 @@ class RotationTest(unittest.TestCase):
             )
 
     def test_rotate_once_handles_role_member_count_combinations(self):
+        """メンバー数が役割数以上の組み合わせで5日間ローテーションできる"""
         counts = [1, 2, 3, 5]
         for role_count in counts:
             for member_count in counts:
@@ -139,6 +143,7 @@ class RotationTest(unittest.TestCase):
                                 )
 
     def test_valid_date_rejects_invalid_date(self):
+        """不正な日付指定はCLI引数エラーにする"""
         with self.assertRaises(argparse.ArgumentTypeError):
             valid_date("2026-13-99")
 
