@@ -73,7 +73,7 @@ class DatabaseTest(unittest.TestCase):
         )
         self.assertRegex(
             assignment["created_at"],
-            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$",
+            r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$",
         )
 
     def test_list_assignments_on_returns_selected_day_or_not_found(self):

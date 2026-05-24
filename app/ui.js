@@ -278,9 +278,16 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
 
 function formatAssignmentMinute(value) {
   if (!value) return "";
-  const match = value.match(/^\d{4}-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
-  if (!match) return value;
-  return `${match[1]}/${match[2]} ${match[3]}:${match[4]}`;
+  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  const date = new Date(normalized.endsWith("Z") ? normalized : `${normalized}Z`);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("ja-JP", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+  }).format(date);
 }
 
 function findAssignment(assignments, roleId, memberId) {

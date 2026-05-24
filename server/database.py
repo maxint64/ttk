@@ -487,7 +487,9 @@ def _clean_assigned_on(value: str | None) -> str:
 
 
 def current_timestamp_ms() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
+    return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace(
+        "+00:00", "Z"
+    )
 
 
 def _migrate_members_email(connection: sqlite3.Connection) -> None:
