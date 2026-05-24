@@ -1,4 +1,4 @@
-.PHONY: help sync dev stop test clean clean-data seed rotate docker-up docker-down docker-rotate
+.PHONY: help sync dev stop test check-js clean clean-data seed rotate docker-up docker-down docker-rotate
 
 PYTHON := uv run python
 TEST_CMD := $(PYTHON) -m unittest discover -s server/tests -t .
@@ -10,6 +10,7 @@ help:
 	@printf "  make dev         Start the local development server\n"
 	@printf "  make stop        Stop the local development server, then remove generated Python files\n"
 	@printf "  make test        Run backend tests, then remove generated Python files\n"
+	@printf "  make check-js    Check frontend JavaScript syntax\n"
 	@printf "  make clean       Remove generated Python files\n"
 	@printf "  make clean-data  Remove the local SQLite database\n"
 	@printf "  make seed        Reset the local SQLite database and insert test data\n"
@@ -31,6 +32,9 @@ stop:
 test:
 	$(TEST_CMD)
 	@$(MAKE) --no-print-directory clean
+
+check-js:
+	@for file in app/*.js; do node --check "$$file"; done
 
 clean:
 	@find server -type d -name __pycache__ -prune -exec rm -rf {} +
