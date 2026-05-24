@@ -1,9 +1,12 @@
-.PHONY: help sync dev stop test check-js clean clean-data seed rotate docker-up docker-down docker-seed docker-rotate
+.PHONY: help sync dev stop test check-js clean clean-data seed rotate docker-up docker-down docker-seed docker-rotate docker-smoke
 
 PYTHON := uv run python
 VERBOSE_ARGS := $(if $(VERBOSE),-v,)
 TEST_CMD := $(PYTHON) -m unittest discover $(VERBOSE_ARGS) -s server/tests -t .
+DATE ?= $(shell date +%F)
 ROTATE_ARGS := $(if $(DATE),--date $(DATE),)
+SMOKE_DATE ?= $(shell date +%F)
+SMOKE_URL ?= http://127.0.0.1:8000
 
 help:
 	@printf "利用できるターゲット:\n"
@@ -15,11 +18,12 @@ help:
 	@printf "  make clean       生成されたPythonファイルを削除する\n"
 	@printf "  make clean-data  ローカルSQLiteデータベースを削除する\n"
 	@printf "  make seed        ローカルSQLiteデータベースを初期化し、テストデータを投入する\n"
-	@printf "  make rotate      ローテーションを1回実行する。対象日を指定するには DATE=YYYY-MM-DD を指定\n"
+	@printf "  make rotate      ローテーションを1回実行する。対象日はデフォルトで実行日、変えるには DATE=YYYY-MM-DD を指定\n"
 	@printf "  make docker-up   Dockerサービスをビルドして起動する\n"
 	@printf "  make docker-down Dockerサービスを停止する\n"
 	@printf "  make docker-seed DockerのSQLiteデータベースを初期化し、テストデータを投入する\n"
-	@printf "  make docker-rotate Docker Compose経由でローテーションを1回実行する。対象日を指定するには DATE=YYYY-MM-DD を指定\n"
+	@printf "  make docker-rotate Docker Compose経由でローテーションを1回実行する。対象日はデフォルトで実行日、変えるには DATE=YYYY-MM-DD を指定\n"
+	@printf "  make docker-smoke Dockerのseed/rotate/API応答を確認する。対象日はデフォルトで実行日、変えるには SMOKE_DATE=YYYY-MM-DD を指定\n"
 
 sync:
 	uv sync
@@ -64,3 +68,12 @@ docker-seed:
 
 docker-rotate:
 	docker compose run --rm ttk uv run python -m server.run_rotation $(ROTATE_ARGS)
+
+docker-smoke:
+	@set -eu; \
+	cleanup() { $(MAKE) --no-print-directory docker-down; }; \
+	trap cleanup EXIT; \
+	$(MAKE) --no-print-directory docker-up; \
+	$(MAKE) --no-print-directory docker-seed; \
+	$(MAKE) --no-print-directory docker-rotate DATE=$(SMOKE_DATE); \
+	$(PYTHON) -m server.docker_smoke --base-url $(SMOKE_URL) --date $(SMOKE_DATE)
