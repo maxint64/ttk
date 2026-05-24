@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 import httpx
@@ -205,6 +206,28 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
             bad_path_date.json(),
             {"error": "担当日はYYYY-MM-DD形式の正しい日付を入力してください。"},
         )
+
+    async def test_event_stream_sends_assignment_change_events(self):
+        """SSEで担当更新イベントをdata形式で配信する"""
+        payload = '{"type":"assignments_changed","count":1}'
+        subscribed = []
+
+        def fake_subscribe(stop_requested):
+            subscribed.append(callable(stop_requested))
+            yield payload
+
+        with mock.patch(
+            "server.server.events.subscribe_events", side_effect=fake_subscribe
+        ):
+            response = await self.client.get("/api/events")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["cache-control"], "no-cache")
+        self.assertEqual(
+            response.headers["content-type"].split(";")[0], "text/event-stream"
+        )
+        self.assertEqual(response.text, f"data: {payload}\n\n")
+        self.assertEqual(subscribed, [True])
 
     async def request_json(self, method, path, payload=None, expected_status=200):
         response = await self.client.request(method, path, json=payload)
