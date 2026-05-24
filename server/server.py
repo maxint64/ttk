@@ -107,6 +107,20 @@ def create_app(
             raise _api_error(404, str(error)) from error
         return {"assignments": assignments}
 
+    @app.get("/api/activities/{activity_id}/assignments/dates/{assigned_on}")
+    async def list_assignments_on(
+        activity_id: str, assigned_on: str
+    ) -> dict[str, list[dict[str, Any]]]:
+        try:
+            assignments = database.list_assignments_on(
+                db_path,
+                _parse_id(activity_id),
+                _clean_date(assigned_on, "assigned_on"),
+            )
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
+        return {"assignments": assignments}
+
     @app.post("/api/activities/{activity_id}/assignments", status_code=201)
     async def add_assignment(
         activity_id: str, body: Any = Body(default=None)
@@ -222,14 +236,17 @@ def _read_optional_date(body: dict[str, Any], key: str) -> str | None:
         return None
     if not isinstance(body[key], str):
         raise _api_error(400, f"{key} must be text")
+    return _clean_date(body[key], key)
 
-    cleaned = body[key].strip()
+
+def _clean_date(value: str, field_name: str) -> str:
+    cleaned = value.strip()
     if not cleaned:
-        raise _api_error(400, f"{key} is required")
+        raise _api_error(400, f"{field_name} is required")
     try:
         date.fromisoformat(cleaned)
     except ValueError as error:
-        raise _api_error(400, f"{key} must be a valid YYYY-MM-DD date") from error
+        raise _api_error(400, f"{field_name} must be a valid YYYY-MM-DD date") from error
     return cleaned
 
 

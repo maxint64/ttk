@@ -179,6 +179,26 @@ def list_assignments(db_path: str | Path, activity_id: int) -> list[dict[str, An
         return _group_assignments(connection).get(activity_id, [])
 
 
+def list_assignments_on(
+    db_path: str | Path, activity_id: int, assigned_on: str
+) -> list[dict[str, Any]]:
+    with connect(db_path) as connection:
+        _require_activity(connection, activity_id)
+        rows = connection.execute(
+            """
+            SELECT id, activity_id, role_id, member_id, assigned_on, created_at
+            FROM role_assignments
+            WHERE activity_id = ? AND assigned_on = ?
+            ORDER BY id ASC
+            """,
+            (activity_id, assigned_on),
+        ).fetchall()
+
+    if not rows:
+        raise NotFoundError("assignments not found")
+    return [dict(row) for row in rows]
+
+
 def add_assignment(
     db_path: str | Path,
     activity_id: int,

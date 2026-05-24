@@ -235,6 +235,29 @@ h1 {
   font-weight: 800;
 }
 
+.date-controls {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(3, auto) minmax(160px, 1fr);
+}
+
+.date-controls button {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--text);
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.date-controls button:hover {
+  background: rgba(23, 107, 91, 0.08);
+  color: var(--primary-strong);
+}
+
+.date-controls input {
+  min-height: 38px;
+}
+
 .assignment-table-wrap {
   overflow-x: auto;
   padding-bottom: 2px;
@@ -398,6 +421,7 @@ h1 {
   .input-row,
   .mini-form,
   .member-form,
+  .date-controls,
   .setup-panels {
     grid-template-columns: 1fr;
   }

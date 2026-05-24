@@ -69,6 +69,23 @@ class DatabaseTest(unittest.TestCase):
             [assignment],
         )
 
+    def test_list_assignments_on_returns_selected_day_or_not_found(self):
+        activity = database.create_activity(self.db_path, "朝会")
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        member = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        assignment = database.add_assignment(
+            self.db_path, activity["id"], role["id"], member["id"], "2026-05-23"
+        )
+
+        self.assertEqual(
+            database.list_assignments_on(self.db_path, activity["id"], "2026-05-23"),
+            [assignment],
+        )
+        with self.assertRaises(database.NotFoundError):
+            database.list_assignments_on(self.db_path, activity["id"], "2026-05-24")
+
     def test_assignment_replaces_role_member_for_same_day(self):
         activity = database.create_activity(self.db_path, "朝会")
         role = database.add_role(self.db_path, activity["id"], "司会")

@@ -51,6 +51,18 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(assignments["assignments"], [assignment])
 
+        assignments_on = await self.request_json(
+            "GET",
+            f"/api/activities/{activity['id']}/assignments/dates/2026-05-23",
+        )
+        self.assertEqual(assignments_on["assignments"], [assignment])
+
+        missing_assignments = await self.client.get(
+            f"/api/activities/{activity['id']}/assignments/dates/2026-05-24"
+        )
+        self.assertEqual(missing_assignments.status_code, 404)
+        self.assertEqual(missing_assignments.json(), {"error": "assignments not found"})
+
         await self.request_empty(
             "DELETE", f"/api/activities/{activity['id']}/assignments/{assignment['id']}"
         )
@@ -161,6 +173,15 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(bad_date.status_code, 400)
         self.assertEqual(
             bad_date.json(), {"error": "assigned_on must be a valid YYYY-MM-DD date"}
+        )
+
+        bad_path_date = await self.client.get(
+            f"/api/activities/{activity['id']}/assignments/dates/2026-13-99"
+        )
+        self.assertEqual(bad_path_date.status_code, 400)
+        self.assertEqual(
+            bad_path_date.json(),
+            {"error": "assigned_on must be a valid YYYY-MM-DD date"},
         )
 
     async def request_json(self, method, path, payload=None, expected_status=200):

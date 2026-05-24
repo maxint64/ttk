@@ -3,9 +3,11 @@ const activityName = document.querySelector("#activityName");
 const activityList = document.querySelector("#activityList");
 const summaryText = document.querySelector("#summaryText");
 const template = document.querySelector("#activityTemplate");
-const today = new Date().toISOString().slice(0, 10);
+const today = formatDate(new Date());
 
 let activities = [];
+const selectedDates = new Map();
+const assignmentViews = new Map();
 
 activityForm.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -45,7 +47,9 @@ async function apiRequest(path, options = {}) {
   const response = await fetch(path, fetchOptions);
   if (!response.ok) {
     const message = await readErrorMessage(response);
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    throw error;
   }
 
   if (response.status === 204) return null;
@@ -80,10 +84,12 @@ function render() {
     const deleteButton = node.querySelector(".activity-delete");
     const roleForm = node.querySelector(".role-form");
     const memberForm = node.querySelector(".member-form");
+    const selectedDate = getSelectedDate(activity.id);
 
     title.textContent = activity.name;
-    meta.textContent = `役割 ${activity.roles.length}件 / メンバー ${activity.members.length}人 / ${today}`;
-    node.querySelector(".assignment-date").textContent = today;
+    meta.textContent = `役割 ${activity.roles.length}件 / メンバー ${activity.members.length}人 / ${selectedDate}`;
+    node.querySelector(".assignment-date").textContent = selectedDate;
+    setupDateControls(node, activity, selectedDate);
 
     deleteButton.addEventListener("click", async () => {
       await apiRequest(`/api/activities/${activity.id}`, { method: "DELETE" });
@@ -119,11 +125,29 @@ function render() {
 
     renderItems(node.querySelector(".role-list"), activity, "roles");
     renderItems(node.querySelector(".member-list"), activity, "members");
-    renderAssignmentTable(node, activity);
+    renderAssignmentTable(node, activity, selectedDate);
     node.querySelector(".role-count").textContent = activity.roles.length;
     node.querySelector(".member-count").textContent = activity.members.length;
 
     activityList.append(node);
+    ensureAssignmentView(activity.id, selectedDate);
+  });
+}
+
+function setupDateControls(node, activity, selectedDate) {
+  const previousButton = node.querySelector(".date-previous");
+  const todayButton = node.querySelector(".date-today");
+  const nextButton = node.querySelector(".date-next");
+  const dateInput = node.querySelector(".assignment-date-input");
+
+  dateInput.value = selectedDate;
+  previousButton.addEventListener("click", () => selectAssignmentDate(activity.id, shiftDate(selectedDate, -1)));
+  todayButton.addEventListener("click", () => selectAssignmentDate(activity.id, today));
+  nextButton.addEventListener("click", () => selectAssignmentDate(activity.id, shiftDate(selectedDate, 1)));
+  dateInput.addEventListener("change", () => {
+    if (dateInput.value) {
+      selectAssignmentDate(activity.id, dateInput.value);
+    }
   });
 }
 
@@ -172,17 +196,26 @@ function renderItems(list, activity, key) {
   });
 }
 
-function renderAssignmentTable(node, activity) {
+function renderAssignmentTable(node, activity, selectedDate) {
   const tableWrap = node.querySelector(".assignment-table-wrap");
   const empty = node.querySelector(".assignment-empty");
+  const view = getAssignmentView(activity.id, selectedDate);
   tableWrap.replaceChildren();
 
   if (activity.roles.length === 0 || activity.members.length === 0) {
     empty.hidden = false;
+    empty.textContent = "役割とメンバーを追加すると表が表示されます。";
     return;
   }
 
-  empty.hidden = true;
+  empty.hidden = view.status === "ready";
+  if (view.status === "loading") {
+    empty.textContent = "担当データを読み込み中です。";
+  } else if (view.status === "missing") {
+    empty.textContent = "この日の担当データはありません。";
+  } else if (view.status === "error") {
+    empty.textContent = "担当データを読み込めませんでした。";
+  }
 
   const table = document.createElement("table");
   table.className = "assignment-table";
@@ -212,7 +245,7 @@ function renderAssignmentTable(node, activity) {
     activity.roles.forEach((role) => {
       const td = document.createElement("td");
       const button = document.createElement("button");
-      const assignment = findTodayAssignment(activity, role.id, member.id);
+      const assignment = findAssignment(view.assignments, role.id, member.id);
       const checked = Boolean(assignment);
 
       button.type = "button";
@@ -221,10 +254,10 @@ function renderAssignmentTable(node, activity) {
       button.setAttribute("aria-pressed", String(checked));
       button.setAttribute(
         "aria-label",
-        `${today}: ${member.name}が${role.name}を担当`
+        `${selectedDate}: ${member.name}が${role.name}を担当`
       );
       button.addEventListener("click", async () => {
-        await toggleAssignment(activity.id, role.id, member.id, assignment);
+        await toggleAssignment(activity.id, selectedDate, role.id, member.id, assignment);
       });
 
       td.append(button);
@@ -238,7 +271,7 @@ function renderAssignmentTable(node, activity) {
   tableWrap.append(table);
 }
 
-async function toggleAssignment(activityId, roleId, memberId, assignment) {
+async function toggleAssignment(activityId, assignedOn, roleId, memberId, assignment) {
   if (assignment) {
     await apiRequest(`/api/activities/${activityId}/assignments/${assignment.id}`, {
       method: "DELETE",
@@ -249,20 +282,81 @@ async function toggleAssignment(activityId, roleId, memberId, assignment) {
       body: {
         role_id: roleId,
         member_id: memberId,
-        assigned_on: today,
+        assigned_on: assignedOn,
       },
     });
   }
+  assignmentViews.delete(viewKey(activityId, assignedOn));
   await loadAndRender();
 }
 
-function findTodayAssignment(activity, roleId, memberId) {
-  return activity.assignments.find(
+function findAssignment(assignments, roleId, memberId) {
+  return assignments.find(
     (assignment) =>
-      assignment.assigned_on === today &&
       assignment.role_id === roleId &&
       assignment.member_id === memberId
   );
+}
+
+function getSelectedDate(activityId) {
+  if (!selectedDates.has(activityId)) {
+    selectedDates.set(activityId, today);
+  }
+  return selectedDates.get(activityId);
+}
+
+function selectAssignmentDate(activityId, assignedOn) {
+  selectedDates.set(activityId, assignedOn);
+  render();
+}
+
+function ensureAssignmentView(activityId, assignedOn) {
+  const key = viewKey(activityId, assignedOn);
+  if (assignmentViews.has(key)) return;
+  loadAssignmentsForDate(activityId, assignedOn);
+}
+
+async function loadAssignmentsForDate(activityId, assignedOn) {
+  const key = viewKey(activityId, assignedOn);
+  assignmentViews.set(key, { status: "loading", assignments: [] });
+
+  try {
+    const data = await apiRequest(
+      `/api/activities/${activityId}/assignments/dates/${assignedOn}`
+    );
+    assignmentViews.set(key, { status: "ready", assignments: data.assignments });
+  } catch (error) {
+    if (error.status === 404) {
+      assignmentViews.set(key, { status: "missing", assignments: [] });
+    } else {
+      assignmentViews.set(key, { status: "error", assignments: [] });
+    }
+  }
+  render();
+}
+
+function getAssignmentView(activityId, assignedOn) {
+  return assignmentViews.get(viewKey(activityId, assignedOn)) || {
+    status: "loading",
+    assignments: [],
+  };
+}
+
+function viewKey(activityId, assignedOn) {
+  return `${activityId}:${assignedOn}`;
+}
+
+function shiftDate(value, days) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return formatDate(date);
+}
+
+function formatDate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function renderError(message) {
