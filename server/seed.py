@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 from . import database
@@ -48,4 +49,4 @@ def reset_and_seed(db_path: str | Path = DEFAULT_DB_PATH) -> None:
 
 
 if __name__ == "__main__":
-    reset_and_seed()
+    reset_and_seed(Path(os.environ.get("TTK_DB_PATH", DEFAULT_DB_PATH)))

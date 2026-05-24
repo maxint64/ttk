@@ -52,7 +52,6 @@ export function render(activities, handlers) {
 
     title.textContent = activity.name;
     meta.textContent = `役割 ${activity.roles.length}件 / メンバー ${activity.members.length}人 / ${selectedDate}`;
-    node.querySelector(".assignment-date").textContent = selectedDate;
     setupDateControls(node, activity, selectedDate, handlers);
 
     deleteButton.addEventListener("click", async () => {
@@ -235,12 +234,22 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
 
       button.type = "button";
       button.className = "assignment-cell";
-      button.textContent = checked ? "✓" : "";
       button.setAttribute("aria-pressed", String(checked));
       button.setAttribute(
         "aria-label",
         `${selectedDate}: ${member.name}が${role.name}を担当`
       );
+      if (checked) {
+        const mark = document.createElement("span");
+        mark.className = "assignment-mark";
+        mark.textContent = "✓";
+
+        const createdAt = document.createElement("span");
+        createdAt.className = "assignment-created-at";
+        createdAt.textContent = `最終更新時間 ${formatAssignmentMinute(assignment.created_at)}`;
+
+        button.append(mark, createdAt);
+      }
       button.addEventListener("click", async () => {
         try {
           clearErrorMessage();
@@ -265,6 +274,13 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
 
   table.append(tbody);
   tableWrap.append(table);
+}
+
+function formatAssignmentMinute(value) {
+  if (!value) return "";
+  const match = value.match(/^\d{4}-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+  if (!match) return value;
+  return `${match[1]}/${match[2]} ${match[3]}:${match[4]}`;
 }
 
 function findAssignment(assignments, roleId, memberId) {

@@ -1,4 +1,4 @@
-.PHONY: help sync dev stop test check-js clean clean-data seed rotate docker-up docker-down docker-rotate
+.PHONY: help sync dev stop test check-js clean clean-data seed rotate docker-up docker-down docker-seed docker-rotate
 
 PYTHON := uv run python
 TEST_CMD := $(PYTHON) -m unittest discover -s server/tests -t .
@@ -17,6 +17,7 @@ help:
 	@printf "  make rotate      Run rotation once. Use DATE=YYYY-MM-DD to target a date\n"
 	@printf "  make docker-up   Build and start Docker services\n"
 	@printf "  make docker-down Stop Docker services\n"
+	@printf "  make docker-seed Reset the Docker SQLite database and insert test data\n"
 	@printf "  make docker-rotate Run rotation once through Docker Compose. Use DATE=YYYY-MM-DD to target a date\n"
 
 sync:
@@ -56,6 +57,9 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+docker-seed:
+	docker compose run --rm ttk uv run python -m server.seed
 
 docker-rotate:
 	docker compose run --rm ttk uv run python -m server.run_rotation $(ROTATE_ARGS)

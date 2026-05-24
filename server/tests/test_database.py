@@ -68,6 +68,10 @@ class DatabaseTest(unittest.TestCase):
             database.get_activity(self.db_path, activity["id"])["assignments"],
             [assignment],
         )
+        self.assertRegex(
+            assignment["created_at"],
+            r"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$",
+        )
 
     def test_list_assignments_on_returns_selected_day_or_not_found(self):
         activity = database.create_activity(self.db_path, "朝会")

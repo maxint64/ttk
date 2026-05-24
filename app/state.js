@@ -42,6 +42,10 @@ export function deleteAssignmentView(activityId, assignedOn) {
   assignmentViews.delete(viewKey(activityId, assignedOn));
 }
 
+export function clearAssignmentViews() {
+  assignmentViews.clear();
+}
+
 export function shiftDate(value, days) {
   const date = new Date(`${value}T00:00:00`);
   date.setDate(date.getDate() + days);

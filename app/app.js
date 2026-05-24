@@ -1,5 +1,6 @@
 import { apiRequest } from "./api.js";
 import {
+  clearAssignmentViews,
   deleteAssignmentView,
   getActivities,
   hasAssignmentView,
@@ -24,6 +25,7 @@ const handlers = {
 
 setupCreateForm(createActivity);
 loadAndRender();
+setupRealtimeUpdates();
 
 async function createActivity(name) {
   await apiRequest("/api/activities", {
@@ -41,6 +43,17 @@ async function loadAndRender() {
   } catch (error) {
     renderError(error.message || "データを読み込めませんでした。サーバーが起動しているか確認してください。");
   }
+}
+
+function setupRealtimeUpdates() {
+  const source = new EventSource("/api/events");
+  source.addEventListener("message", async (event) => {
+    const payload = JSON.parse(event.data);
+    if (payload.type !== "assignments_changed") return;
+
+    clearAssignmentViews();
+    await loadAndRender();
+  });
 }
 
 async function deleteActivity(activityId) {

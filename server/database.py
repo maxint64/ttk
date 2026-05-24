@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -232,10 +232,10 @@ def add_assignment(
         cursor = connection.execute(
             """
             INSERT INTO role_assignments
-                (activity_id, role_id, member_id, assigned_on)
-            VALUES (?, ?, ?, ?)
+                (activity_id, role_id, member_id, assigned_on, created_at)
+            VALUES (?, ?, ?, ?, ?)
             """,
-            (activity_id, role_id, member_id, assigned_on),
+            (activity_id, role_id, member_id, assigned_on, current_timestamp_ms()),
         )
         assignment_id = cursor.lastrowid
 
@@ -295,10 +295,10 @@ def rotate_assignments(db_path: str | Path, target_on: str | None = None) -> lis
             cursor = connection.execute(
                 """
                 INSERT INTO role_assignments
-                    (activity_id, role_id, member_id, assigned_on)
-                VALUES (?, ?, ?, ?)
+                    (activity_id, role_id, member_id, assigned_on, created_at)
+                VALUES (?, ?, ?, ?, ?)
                 """,
-                (activity_id, role_id, next_member_id, target_on),
+                (activity_id, role_id, next_member_id, target_on, current_timestamp_ms()),
             )
             row = connection.execute(
                 """
@@ -484,6 +484,10 @@ def _clean_assigned_on(value: str | None) -> str:
     except ValueError as error:
         raise ValidationError("担当日はYYYY-MM-DD形式の正しい日付を入力してください。") from error
     return cleaned
+
+
+def current_timestamp_ms() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
 
 def _migrate_members_email(connection: sqlite3.Connection) -> None:

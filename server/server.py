@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import atexit
+import asyncio
 import os
+import threading
 import unicodedata
 from datetime import date
 from pathlib import Path
@@ -10,11 +12,11 @@ from typing import Any, Callable
 import uvicorn
 from fastapi import Body, FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import DEFAULT_DB_PATH, DEFAULT_PID_PATH, DEFAULT_STATIC_DIR
-from . import database
+from . import database, events
 
 
 MAX_TEXT_LENGTH = 144
@@ -49,6 +51,14 @@ def create_app(
     @app.get("/api/activities")
     async def list_activities() -> dict[str, list[dict[str, Any]]]:
         return {"activities": database.list_activities(db_path)}
+
+    @app.get("/api/events")
+    async def event_stream(request: Request) -> StreamingResponse:
+        return StreamingResponse(
+            stream_events(request),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
 
     @app.post("/api/activities", status_code=201)
     async def create_activity(body: Any = Body(default=None)) -> dict[str, Any]:
@@ -131,13 +141,15 @@ def create_app(
     ) -> dict[str, Any]:
         body = _read_json_object(body)
         try:
-            return database.add_assignment(
+            assignment = database.add_assignment(
                 db_path,
                 _parse_id(activity_id),
                 _read_body_id(body, "role_id"),
                 _read_body_id(body, "member_id"),
                 _read_optional_date(body, "assigned_on"),
             )
+            events.publish_assignments_changed(1)
+            return assignment
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
         except database.NotFoundError as error:
@@ -153,6 +165,7 @@ def create_app(
             database.delete_assignment(
                 db_path, _parse_id(activity_id), _parse_id(assignment_id)
             )
+            events.publish_assignments_changed(1)
         except database.NotFoundError as error:
             raise _api_error(404, str(error)) from error
         return Response(status_code=204)
@@ -163,6 +176,35 @@ def create_app(
 
     app.mount("/", StaticFiles(directory=static_dir, html=True), name="static")
     return app
+
+
+async def stream_events(request: Request):
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[str | None] = asyncio.Queue()
+    stop_event = threading.Event()
+
+    def subscribe() -> None:
+        for message in events.subscribe_events(stop_event.is_set):
+            loop.call_soon_threadsafe(queue.put_nowait, message)
+        loop.call_soon_threadsafe(queue.put_nowait, None)
+
+    thread = threading.Thread(target=subscribe, daemon=True)
+    thread.start()
+
+    try:
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                message = await asyncio.wait_for(queue.get(), timeout=15)
+            except TimeoutError:
+                yield ": keep-alive\n\n"
+                continue
+            if message is None:
+                break
+            yield f"data: {message}\n\n"
+    finally:
+        stop_event.set()
 
 
 def _read_json_object(parsed: Any) -> dict[str, Any]:

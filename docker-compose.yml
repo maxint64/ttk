@@ -7,8 +7,17 @@ services:
       TTK_HOST: 0.0.0.0
       TTK_PORT: 8000
       TTK_DB_PATH: /app/data/ttk.sqlite3
+      TTK_REDIS_URL: redis://redis:6379/0
     volumes:
       - ttk-data:/app/data
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
 volumes:

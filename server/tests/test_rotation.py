@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from server import database, rotation
 from server.run_rotation import valid_date
@@ -54,9 +55,13 @@ class RotationTest(unittest.TestCase):
             )
 
             output = io.StringIO()
-            with redirect_stdout(output):
+            with (
+                redirect_stdout(output),
+                mock.patch.object(rotation.events, "publish_assignments_changed") as publish,
+            ):
                 rotation.run(db_path, "2026-05-24")
 
+            publish.assert_called_once_with(1)
             self.assertEqual(
                 output.getvalue().splitlines(),
                 [
