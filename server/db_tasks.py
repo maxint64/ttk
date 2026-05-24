@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import os
 from pathlib import Path
 
@@ -7,12 +8,17 @@ from . import database
 from .config import DEFAULT_DB_PATH
 
 
-def reset_and_seed(db_path: str | Path = DEFAULT_DB_PATH) -> None:
+def reset_db(db_path: str | Path = DEFAULT_DB_PATH) -> None:
     db_path = Path(db_path)
     if db_path.exists():
         db_path.unlink()
-
     database.init_db(db_path)
+    print(f"reset database at {db_path}", flush=True)
+
+
+def reset_and_seed(db_path: str | Path = DEFAULT_DB_PATH) -> None:
+    db_path = Path(db_path)
+    reset_db(db_path)
 
     standup = database.create_activity(db_path, "朝会")
     tanaka = database.add_member(db_path, standup["id"], "田中", "tanaka@example.com")
@@ -45,8 +51,19 @@ def reset_and_seed(db_path: str | Path = DEFAULT_DB_PATH) -> None:
         db_path, cleanup["id"], trash["id"], ito["id"], "2026-05-23"
     )
 
-    print(f"seeded database at {db_path}")
+    print(f"seeded database at {db_path}", flush=True)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="DB操作タスクを実行します。")
+    parser.add_argument("task", choices=["reset", "seed"])
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    reset_and_seed(Path(os.environ.get("TTK_DB_PATH", DEFAULT_DB_PATH)))
+    args = parse_args()
+    db_path = Path(os.environ.get("TTK_DB_PATH", DEFAULT_DB_PATH))
+    if args.task == "reset":
+        reset_db(db_path)
+    else:
+        reset_and_seed(db_path)
