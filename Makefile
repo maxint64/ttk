@@ -1,4 +1,4 @@
-.PHONY: help sync dev stop test check-js clean clean-data seed rotate docker-up docker-down docker-reset docker-seed docker-rotate docker-smoke docker-perf
+.PHONY: help sync dev stop test check-js clean clean-data migrate seed rotate docker-up docker-down docker-reset docker-seed docker-rotate docker-smoke docker-perf
 
 PYTHON := uv run python
 VERBOSE_ARGS := $(if $(VERBOSE),-v,)
@@ -27,6 +27,7 @@ help:
 	@printf "  make check-js    フロントエンドJavaScriptの構文をチェックする\n"
 	@printf "  make clean       生成されたPythonファイルを削除する\n"
 	@printf "  make clean-data  ローカルSQLiteデータベースを削除する\n"
+	@printf "  make migrate     ローカルSQLiteデータベースにAlembic migrationを適用する\n"
 	@printf "  make seed        ローカルSQLiteデータベースを初期化し、テストデータを投入する\n"
 	@printf "  make rotate      ローテーションを1回実行する。対象日はデフォルトで実行日、変えるには DATE=YYYY-MM-DD を指定\n"
 	@printf "  make docker-up   Dockerサービスをビルドして起動する\n"
@@ -61,6 +62,9 @@ clean:
 
 clean-data:
 	rm -rf data
+
+migrate:
+	$(PYTHON) -m alembic upgrade head
 
 seed:
 	$(PYTHON) -m server.db_tasks seed

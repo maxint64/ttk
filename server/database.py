@@ -5,6 +5,11 @@ from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from alembic import command
+from alembic.config import Config
+
+from .config import PROJECT_ROOT
+
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
     connection = sqlite3.connect(db_path)
@@ -14,65 +19,16 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
 
 
 def init_db(db_path: str | Path) -> None:
-    Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    with connect(db_path) as connection:
-        connection.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS activities (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
+    command.upgrade(migration_config(db_path), "head")
 
-            CREATE TABLE IF NOT EXISTS roles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                activity_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
-                UNIQUE (activity_id, name)
-            );
 
-            CREATE TABLE IF NOT EXISTS members (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                activity_id INTEGER NOT NULL,
-                name TEXT NOT NULL,
-                email TEXT,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
-                UNIQUE (activity_id, email)
-            );
+def migration_config(db_path: str | Path) -> Config:
+    db_path = Path(db_path)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
 
-            CREATE TABLE IF NOT EXISTS role_assignments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                activity_id INTEGER NOT NULL,
-                role_id INTEGER NOT NULL,
-                member_id INTEGER NOT NULL,
-                assigned_on TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
-                FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE,
-                FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
-                UNIQUE (activity_id, role_id, member_id, assigned_on)
-            );
-            """
-        )
-        _migrate_members_email(connection)
-        _create_unique_index_if_possible(
-            connection,
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS roles_activity_name_unique
-            ON roles (activity_id, name)
-            """,
-        )
-        _create_unique_index_if_possible(
-            connection,
-            """
-            CREATE UNIQUE INDEX IF NOT EXISTS members_activity_email_unique
-            ON members (activity_id, email)
-            WHERE email IS NOT NULL
-            """,
-        )
+    config = Config(str(PROJECT_ROOT / "alembic.ini"))
+    config.attributes["db_path"] = db_path
+    return config
 
 
 class NotFoundError(Exception):
@@ -491,20 +447,3 @@ def current_timestamp_ms() -> str:
         "+00:00", "Z"
     )
 
-
-def _migrate_members_email(connection: sqlite3.Connection) -> None:
-    columns = {
-        row["name"]
-        for row in connection.execute("PRAGMA table_info(members)").fetchall()
-    }
-    if "email" not in columns:
-        connection.execute("ALTER TABLE members ADD COLUMN email TEXT")
-
-
-def _create_unique_index_if_possible(
-    connection: sqlite3.Connection, statement: str
-) -> None:
-    try:
-        connection.execute(statement)
-    except sqlite3.IntegrityError:
-        pass
