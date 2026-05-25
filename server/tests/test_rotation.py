@@ -64,7 +64,9 @@ class RotationTest(unittest.TestCase):
             ):
                 rotation.run(db_path, "2026-05-24")
 
-            publish.assert_called_once_with(1)
+            publish.assert_called_once_with(
+                1, assigned_on="2026-05-24", activity_ids=[activity["id"]]
+            )
             self.assertEqual(
                 output.getvalue().splitlines(),
                 [

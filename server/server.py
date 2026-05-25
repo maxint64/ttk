@@ -23,8 +23,10 @@ from .schemas import (
     AssignmentResponse,
     AssignmentsResponse,
     ErrorResponse,
+    MemberDayOffResponse,
     MemberResponse,
     RoleResponse,
+    RoleMemberSkipResponse,
 )
 
 
@@ -87,9 +89,8 @@ def create_app(
     async def create_activity(body: Any = Body(default=None)) -> ActivityResponse:
         body = _read_json_object(body)
         try:
-            return ActivityResponse.model_validate(
-                database.create_activity(db_path, _read_text(body, "name"))
-            )
+            activity = database.create_activity(db_path, _read_text(body, "name"))
+            return ActivityResponse.model_validate(activity)
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
 
@@ -108,9 +109,8 @@ def create_app(
         responses=error_responses,
     )
     async def add_role(activity_id: str, body: Any = Body(default=None)) -> RoleResponse:
-        return RoleResponse.model_validate(
-            _add_activity_item(db_path, activity_id, body, database.add_role)
-        )
+        role = _add_activity_item(db_path, activity_id, body, database.add_role)
+        return RoleResponse.model_validate(role)
 
     @app.post(
         "/api/activities/{activity_id}/members",
@@ -121,14 +121,14 @@ def create_app(
     async def add_member(activity_id: str, body: Any = Body(default=None)) -> MemberResponse:
         body = _read_json_object(body)
         try:
-            return MemberResponse.model_validate(
-                database.add_member(
-                    db_path,
-                    _parse_id(activity_id),
-                    _read_text(body, "name"),
-                    _read_email(body, "email"),
-                )
+            parsed_activity_id = _parse_id(activity_id)
+            member = database.add_member(
+                db_path,
+                parsed_activity_id,
+                _read_text(body, "name"),
+                _read_email(body, "email"),
             )
+            return MemberResponse.model_validate(member)
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
         except database.NotFoundError as error:
@@ -150,6 +150,106 @@ def create_app(
     )
     async def delete_member(activity_id: str, member_id: str) -> Response:
         _delete_activity_item(db_path, activity_id, member_id, database.delete_member)
+        return Response(status_code=204)
+
+    @app.post(
+        "/api/activities/{activity_id}/members/{member_id}/days-off",
+        status_code=201,
+        response_model=MemberDayOffResponse,
+        responses=error_responses,
+    )
+    async def add_member_day_off(
+        activity_id: str, member_id: str, body: Any = Body(default=None)
+    ) -> MemberDayOffResponse:
+        body = _read_json_object(body)
+        try:
+            parsed_activity_id = _parse_id(activity_id)
+            parsed_member_id = _parse_id(member_id)
+            off_on = _read_optional_date(body, "off_on")
+            day_off = database.add_member_day_off(
+                db_path,
+                parsed_activity_id,
+                parsed_member_id,
+                off_on,
+            )
+            return MemberDayOffResponse.model_validate(day_off)
+        except database.AvailabilityReassignError as error:
+            raise _api_error(400, str(error)) from error
+        except database.ValidationError as error:
+            raise _api_error(400, str(error)) from error
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
+
+    @app.delete(
+        "/api/activities/{activity_id}/members/{member_id}/days-off/{off_on}",
+        status_code=204,
+        response_class=Response,
+    )
+    async def delete_member_day_off(
+        activity_id: str, member_id: str, off_on: str
+    ) -> Response:
+        parsed_activity_id = _parse_id(activity_id)
+        parsed_member_id = _parse_id(member_id)
+        cleaned_off_on = _clean_date(off_on, "off_on")
+        try:
+            database.delete_member_day_off(
+                db_path,
+                parsed_activity_id,
+                parsed_member_id,
+                cleaned_off_on,
+            )
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
+        return Response(status_code=204)
+
+    @app.post(
+        "/api/activities/{activity_id}/roles/{role_id}/skips",
+        status_code=201,
+        response_model=RoleMemberSkipResponse,
+        responses=error_responses,
+    )
+    async def add_role_member_skip(
+        activity_id: str, role_id: str, body: Any = Body(default=None)
+    ) -> RoleMemberSkipResponse:
+        body = _read_json_object(body)
+        try:
+            parsed_activity_id = _parse_id(activity_id)
+            parsed_role_id = _parse_id(role_id)
+            parsed_member_id = _read_body_id(body, "member_id")
+            skip = database.add_role_member_skip(
+                db_path,
+                parsed_activity_id,
+                parsed_role_id,
+                parsed_member_id,
+            )
+            return RoleMemberSkipResponse.model_validate(skip)
+        except database.AvailabilityReassignError as error:
+            raise _api_error(400, str(error)) from error
+        except database.ValidationError as error:
+            raise _api_error(400, str(error)) from error
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
+
+    @app.delete(
+        "/api/activities/{activity_id}/roles/{role_id}/skips/{member_id}",
+        status_code=204,
+        response_class=Response,
+    )
+    async def delete_role_member_skip(
+        activity_id: str, role_id: str, member_id: str
+    ) -> Response:
+        parsed_activity_id = _parse_id(activity_id)
+        parsed_role_id = _parse_id(role_id)
+        parsed_member_id = _parse_id(member_id)
+        try:
+            database.delete_role_member_skip(
+                db_path,
+                parsed_activity_id,
+                parsed_role_id,
+                parsed_member_id,
+            )
+        except database.NotFoundError as error:
+            raise _api_error(404, str(error)) from error
         return Response(status_code=204)
 
     @app.get(
@@ -200,7 +300,6 @@ def create_app(
                 _read_body_id(body, "member_id"),
                 _read_optional_date(body, "assigned_on"),
             )
-            events.publish_assignments_changed(1)
             return AssignmentResponse.model_validate(assignment)
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
@@ -214,10 +313,7 @@ def create_app(
     )
     async def delete_assignment(activity_id: str, assignment_id: str) -> Response:
         try:
-            database.delete_assignment(
-                db_path, _parse_id(activity_id), _parse_id(assignment_id)
-            )
-            events.publish_assignments_changed(1)
+            database.delete_assignment(db_path, _parse_id(activity_id), _parse_id(assignment_id))
         except database.NotFoundError as error:
             raise _api_error(404, str(error)) from error
         return Response(status_code=204)
@@ -366,6 +462,7 @@ def _field_label(field_name: str) -> str:
         "email": "メールアドレス",
         "member_id": "メンバーID",
         "name": "名前",
+        "off_on": "休みの日",
         "role_id": "役割ID",
     }
     return labels.get(field_name, field_name)

@@ -155,6 +155,193 @@ class DatabaseTest(unittest.TestCase):
 
         self.assertEqual(created[0]["member_id"], first["id"])
 
+    def test_rotate_assignments_skips_member_day_off(self):
+        """休みの日のメンバーを飛ばして次の担当者へ進む"""
+        activity = database.create_activity(self.db_path, "朝会")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
+        third = database.add_member(
+            self.db_path, activity["id"], "鈴木", "suzuki@example.com"
+        )
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
+        )
+        database.add_member_day_off(
+            self.db_path, activity["id"], second["id"], "2026-05-24"
+        )
+
+        created = database.rotate_assignments(self.db_path, "2026-05-24")
+
+        self.assertEqual(created[0]["member_id"], third["id"])
+
+    def test_rotate_assignments_skips_role_member_skip(self):
+        """スキップ中の役割は担当せず次のメンバーへ進む"""
+        activity = database.create_activity(self.db_path, "朝会")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
+        third = database.add_member(
+            self.db_path, activity["id"], "鈴木", "suzuki@example.com"
+        )
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
+        )
+        database.add_role_member_skip(
+            self.db_path, activity["id"], role["id"], second["id"]
+        )
+
+        created = database.rotate_assignments(self.db_path, "2026-05-24")
+
+        self.assertEqual(created[0]["member_id"], third["id"])
+
+    def test_rotate_assignments_skips_when_no_available_member(self):
+        """全員が休みまたはスキップの場合は担当を作成しない"""
+        activity = database.create_activity(self.db_path, "朝会")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
+        )
+        database.add_member_day_off(
+            self.db_path, activity["id"], first["id"], "2026-05-24"
+        )
+        database.add_role_member_skip(
+            self.db_path, activity["id"], role["id"], second["id"]
+        )
+
+        self.assertEqual(database.rotate_assignments(self.db_path, "2026-05-24"), [])
+
+    def test_assignment_rejects_day_off_and_skipped_member(self):
+        """休みまたはスキップ中のメンバーには手動でも担当を入れない"""
+        activity = database.create_activity(self.db_path, "朝会")
+        member = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        role = database.add_role(self.db_path, activity["id"], "司会")
+
+        day_off = database.add_member_day_off(
+            self.db_path, activity["id"], member["id"], "2026-05-24"
+        )
+        activity_detail = database.get_activity(self.db_path, activity["id"])
+        self.assertEqual(activity_detail["member_days_off"], [day_off])
+        with self.assertRaisesRegex(database.ValidationError, "指定日に休み"):
+            database.add_assignment(
+                self.db_path, activity["id"], role["id"], member["id"], "2026-05-24"
+            )
+
+        database.delete_member_day_off(
+            self.db_path, activity["id"], member["id"], "2026-05-24"
+        )
+        skip = database.add_role_member_skip(
+            self.db_path, activity["id"], role["id"], member["id"]
+        )
+        activity_detail = database.get_activity(self.db_path, activity["id"])
+        self.assertEqual(activity_detail["role_member_skips"], [skip])
+        with self.assertRaisesRegex(database.ValidationError, "スキップ中"):
+            database.add_assignment(
+                self.db_path, activity["id"], role["id"], member["id"], "2026-05-24"
+            )
+
+    def test_day_off_reassigns_existing_assignment_or_reports_missing_member(self):
+        """既存担当がある日の休み設定は次のメンバーへ担当を移す"""
+        activity = database.create_activity(self.db_path, "朝会")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-24"
+        )
+
+        day_off = database.add_member_day_off(
+            self.db_path, activity["id"], first["id"], "2026-05-24"
+        )
+
+        assignments = database.list_assignments_on(
+            self.db_path, activity["id"], "2026-05-24"
+        )
+        self.assertEqual(day_off["member_id"], first["id"])
+        self.assertEqual(assignments[0]["member_id"], second["id"])
+
+        solo = database.create_activity(self.db_path, "掃除")
+        member = database.add_member(
+            self.db_path, solo["id"], "山田", "yamada@example.com"
+        )
+        solo_role = database.add_role(self.db_path, solo["id"], "床")
+        database.add_assignment(
+            self.db_path, solo["id"], solo_role["id"], member["id"], "2026-05-24"
+        )
+
+        with self.assertRaisesRegex(database.AvailabilityReassignError, "休みを設定しました"):
+            database.add_member_day_off(
+                self.db_path, solo["id"], member["id"], "2026-05-24"
+            )
+
+        solo_detail = database.get_activity(self.db_path, solo["id"])
+        self.assertEqual(len(solo_detail["member_days_off"]), 1)
+        with self.assertRaises(database.NotFoundError):
+            database.list_assignments_on(self.db_path, solo["id"], "2026-05-24")
+
+    def test_skip_reassigns_existing_assignment_or_reports_missing_member(self):
+        """既存担当があるスキップ設定は次のメンバーへ担当を移す"""
+        activity = database.create_activity(self.db_path, "朝会")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-24"
+        )
+
+        skip = database.add_role_member_skip(
+            self.db_path, activity["id"], role["id"], first["id"]
+        )
+
+        assignments = database.list_assignments_on(
+            self.db_path, activity["id"], "2026-05-24"
+        )
+        self.assertEqual(skip["member_id"], first["id"])
+        self.assertEqual(assignments[0]["member_id"], second["id"])
+
+        solo = database.create_activity(self.db_path, "掃除")
+        member = database.add_member(
+            self.db_path, solo["id"], "山田", "yamada@example.com"
+        )
+        solo_role = database.add_role(self.db_path, solo["id"], "床")
+        database.add_assignment(
+            self.db_path, solo["id"], solo_role["id"], member["id"], "2026-05-24"
+        )
+
+        with self.assertRaisesRegex(database.AvailabilityReassignError, "スキップを設定しました"):
+            database.add_role_member_skip(
+                self.db_path, solo["id"], solo_role["id"], member["id"]
+            )
+
+        solo_detail = database.get_activity(self.db_path, solo["id"])
+        self.assertEqual(len(solo_detail["role_member_skips"]), 1)
+        with self.assertRaises(database.NotFoundError):
+            database.list_assignments_on(self.db_path, solo["id"], "2026-05-24")
+
     def test_rotate_assignments_skips_roles_without_manual_assignment(self):
         """過去の担当がない役割はローテーション対象にしない"""
         activity = database.create_activity(self.db_path, "朝会")

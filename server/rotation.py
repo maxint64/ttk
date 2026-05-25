@@ -19,7 +19,11 @@ def rotate_once(
 def run(db_path: str | Path = DEFAULT_DB_PATH, target_on: str | None = None) -> None:
     created = rotate_once(db_path, target_on)
     if created:
-        events.publish_assignments_changed(len(created))
+        events.publish_assignments_changed(
+            len(created),
+            assigned_on=created[0]["assigned_on"],
+            activity_ids=sorted({item["activity_id"] for item in created}),
+        )
     print(f"rotated {len(created)} assignments", flush=True)
     for assignment in database.describe_assignments(
         db_path, [item["id"] for item in created]

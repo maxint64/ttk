@@ -322,7 +322,7 @@ h1 {
 }
 
 .assignment-table th:first-child {
-  min-width: 132px;
+  min-width: 160px;
 }
 
 .assignment-table thead th {
@@ -343,6 +343,48 @@ h1 {
   overflow-wrap: anywhere;
   padding: 8px 10px;
   text-align: left;
+}
+
+.member-row-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.member-row-header span {
+  overflow-wrap: anywhere;
+}
+
+.day-off-toggle,
+.skip-toggle {
+  background: #fff;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  min-height: 28px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+
+.day-off-toggle:hover,
+.skip-toggle:hover {
+  background: rgba(23, 107, 91, 0.08);
+  color: var(--primary-strong);
+}
+
+.day-off-toggle[aria-pressed="true"],
+.skip-toggle[aria-pressed="true"] {
+  background: #fff7dc;
+  border-color: #e3c46f;
+  color: #76510f;
+}
+
+.assignment-cell-stack {
+  display: grid;
+  grid-template-rows: 54px 30px;
+  min-height: 84px;
 }
 
 .assignment-table thead th:first-child {
@@ -378,6 +420,17 @@ h1 {
 .assignment-cell:hover {
   background: rgba(23, 107, 91, 0.08);
   color: var(--primary-strong);
+}
+
+.assignment-cell:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.82;
+}
+
+.assignment-cell:disabled:hover {
+  background: transparent;
+  color: var(--muted);
 }
 
 .assignment-cell[aria-pressed="true"] {
@@ -496,5 +549,10 @@ h1 {
 
   .chip button {
     width: 24px;
+  }
+
+  .day-off-toggle,
+  .skip-toggle {
+    width: auto;
   }
 }

@@ -3,6 +3,7 @@ import {
   clearAssignmentViews,
   deleteAssignmentView,
   getActivities,
+  getSelectedDate,
   hasAssignmentView,
   setActivities,
   setAssignmentView,
@@ -25,9 +26,16 @@ const handlers = {
   onRemoveItem: removeItem,
   onSelectAssignmentDate: selectAssignmentDate,
   onToggleAssignment: toggleAssignment,
+  onToggleDayOff: toggleDayOff,
+  onToggleSkip: toggleSkip,
 };
 
 let hasPendingRemoteAssignmentUpdate = false;
+const realtimeUpdateTypes = new Set([
+  "activities_changed",
+  "assignments_changed",
+  "availability_changed",
+]);
 
 setupCreateForm(createActivity);
 setupUpdateNotice(applyRemoteAssignmentUpdate);
@@ -61,20 +69,64 @@ function setupRealtimeUpdates() {
     } catch {
       return;
     }
-    if (payload.type !== "assignments_changed") return;
+    if (!realtimeUpdateTypes.has(payload.type)) return;
 
-    await handleRemoteAssignmentUpdate();
+    await handleRemoteAssignmentUpdate(payload);
   });
 }
 
-async function handleRemoteAssignmentUpdate() {
-  hasPendingRemoteAssignmentUpdate = true;
-  if (hasPendingUserInput()) {
-    showUpdateNotice();
+async function handleRemoteAssignmentUpdate(payload) {
+  if (!isDisplayedUpdate(payload)) {
+    await applySilentRemoteUpdate();
     return;
   }
 
-  await applyRemoteAssignmentUpdate();
+  hasPendingRemoteAssignmentUpdate = true;
+  showUpdateNotice(hasPendingUserInput());
+}
+
+function isDisplayedUpdate(payload) {
+  if (payload.type === "activities_changed") {
+    if (payload.action === "created") return false;
+    return hasDisplayedActivity(payload.activity_id);
+  }
+
+  if (payload.type === "assignments_changed") {
+    return assignmentUpdateIsDisplayed(payload);
+  }
+
+  if (payload.type === "availability_changed") {
+    if (!hasDisplayedActivity(payload.activity_id)) return false;
+    if (payload.off_on) {
+      return getSelectedDate(payload.activity_id) === payload.off_on;
+    }
+    return true;
+  }
+
+  return true;
+}
+
+function assignmentUpdateIsDisplayed(payload) {
+  if (payload.activity_id) {
+    return (
+      hasDisplayedActivity(payload.activity_id) &&
+      getSelectedDate(payload.activity_id) === payload.assigned_on
+    );
+  }
+
+  if (Array.isArray(payload.activity_ids)) {
+    return payload.activity_ids.some(
+      (activityId) =>
+        hasDisplayedActivity(activityId) &&
+        getSelectedDate(activityId) === payload.assigned_on
+    );
+  }
+
+  return true;
+}
+
+function hasDisplayedActivity(activityId) {
+  return getActivities().some((activity) => activity.id === Number(activityId));
 }
 
 async function applyRemoteAssignmentUpdate() {
@@ -82,6 +134,11 @@ async function applyRemoteAssignmentUpdate() {
 
   hasPendingRemoteAssignmentUpdate = false;
   hideUpdateNotice();
+  clearAssignmentViews();
+  await loadAndRender();
+}
+
+async function applySilentRemoteUpdate() {
   clearAssignmentViews();
   await loadAndRender();
 }
@@ -111,6 +168,7 @@ async function removeItem(activityId, key, itemId) {
 
 function selectAssignmentDate(activityId, assignedOn) {
   setSelectedDate(activityId, assignedOn);
+  deleteAssignmentView(activityId, assignedOn);
   render(getActivities(), handlers);
 }
 
@@ -161,4 +219,37 @@ async function toggleAssignment(activityId, assignedOn, roleId, memberId, assign
   }
   deleteAssignmentView(activityId, assignedOn);
   await loadAndRender();
+}
+
+async function toggleDayOff(activityId, assignedOn, memberId, dayOff) {
+  const path = `/api/activities/${activityId}/members/${memberId}/days-off`;
+  try {
+    if (dayOff) {
+      await apiRequest(`${path}/${assignedOn}`, { method: "DELETE" });
+    } else {
+      await apiRequest(path, {
+        method: "POST",
+        body: { off_on: assignedOn },
+      });
+    }
+  } finally {
+    deleteAssignmentView(activityId, assignedOn);
+    await loadAndRender();
+  }
+}
+
+async function toggleSkip(activityId, roleId, memberId, skip) {
+  const path = `/api/activities/${activityId}/roles/${roleId}/skips`;
+  try {
+    if (skip) {
+      await apiRequest(`${path}/${memberId}`, { method: "DELETE" });
+    } else {
+      await apiRequest(path, {
+        method: "POST",
+        body: { member_id: memberId },
+      });
+    }
+  } finally {
+    await loadAndRender();
+  }
 }

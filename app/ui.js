@@ -141,7 +141,10 @@ export function clearErrorMessage() {
   errorMessage.hidden = true;
 }
 
-export function showUpdateNotice() {
+export function showUpdateNotice(hasPendingInput = false) {
+  updateNotice.querySelector("span").textContent = hasPendingInput
+    ? "担当情報が更新されています。入力中の内容を確認してから最新情報を表示してください。"
+    : "担当情報が更新されています。最新情報を表示できます。";
   updateNotice.hidden = false;
 }
 
@@ -264,21 +267,49 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
 
   const tbody = document.createElement("tbody");
   activity.members.forEach((member) => {
+    const dayOff = findDayOff(activity.member_days_off, member.id, selectedDate);
     const row = document.createElement("tr");
     const memberHeader = document.createElement("th");
     memberHeader.scope = "row";
-    memberHeader.textContent = member.name;
+
+    const memberHeaderInner = document.createElement("div");
+    memberHeaderInner.className = "member-row-header";
+
+    const memberName = document.createElement("span");
+    memberName.textContent = member.name;
+
+    const dayOffButton = document.createElement("button");
+    dayOffButton.type = "button";
+    dayOffButton.className = "day-off-toggle";
+    dayOffButton.setAttribute("aria-pressed", String(Boolean(dayOff)));
+    dayOffButton.textContent = dayOff ? "休み中" : "休み";
+    dayOffButton.addEventListener("click", async () => {
+      try {
+        clearErrorMessage();
+        await handlers.onToggleDayOff(activity.id, selectedDate, member.id, dayOff);
+      } catch (error) {
+        showErrorMessage(error.message);
+      }
+    });
+
+    memberHeaderInner.append(memberName, dayOffButton);
+    memberHeader.append(memberHeaderInner);
     row.append(memberHeader);
 
     activity.roles.forEach((role) => {
       const td = document.createElement("td");
+      const cell = document.createElement("div");
+      cell.className = "assignment-cell-stack";
       const button = document.createElement("button");
       const assignment = findAssignment(view.assignments, role.id, member.id);
+      const skip = findSkip(activity.role_member_skips, role.id, member.id);
       const checked = Boolean(assignment);
+      const unavailable = Boolean(dayOff || skip);
 
       button.type = "button";
       button.className = "assignment-cell";
       button.setAttribute("aria-pressed", String(checked));
+      button.disabled = unavailable && !checked;
       button.setAttribute(
         "aria-label",
         `${selectedDate}: ${member.name}が${role.name}を担当`
@@ -293,6 +324,10 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
         createdAt.textContent = `最終更新時間 ${formatAssignmentMinute(assignment.created_at)}`;
 
         button.append(mark, createdAt);
+      } else if (dayOff) {
+        button.textContent = "休み";
+      } else if (skip) {
+        button.textContent = "スキップ";
       }
       button.addEventListener("click", async () => {
         try {
@@ -309,7 +344,22 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
         }
       });
 
-      td.append(button);
+      const skipButton = document.createElement("button");
+      skipButton.type = "button";
+      skipButton.className = "skip-toggle";
+      skipButton.setAttribute("aria-pressed", String(Boolean(skip)));
+      skipButton.textContent = skip ? "スキップ中" : "スキップ";
+      skipButton.addEventListener("click", async () => {
+        try {
+          clearErrorMessage();
+          await handlers.onToggleSkip(activity.id, role.id, member.id, skip);
+        } catch (error) {
+          showErrorMessage(error.message);
+        }
+      });
+
+      cell.append(button, skipButton);
+      td.append(cell);
       row.append(td);
     });
 
@@ -339,5 +389,21 @@ function findAssignment(assignments, roleId, memberId) {
     (assignment) =>
       assignment.role_id === roleId &&
       assignment.member_id === memberId
+  );
+}
+
+function findDayOff(daysOff = [], memberId, offOn) {
+  return daysOff.find(
+    (dayOff) =>
+      dayOff.member_id === memberId &&
+      dayOff.off_on === offOn
+  );
+}
+
+function findSkip(skips = [], roleId, memberId) {
+  return skips.find(
+    (skip) =>
+      skip.role_id === roleId &&
+      skip.member_id === memberId
   );
 }

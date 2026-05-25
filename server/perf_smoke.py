@@ -227,7 +227,11 @@ def setup_activity(
 def rotate_assignments(db_path: Path, assigned_on: str, metrics: Metrics) -> None:
     created = rotation.rotate_once(db_path, assigned_on)
     if created:
-        events.publish_assignments_changed(len(created))
+        events.publish_assignments_changed(
+            len(created),
+            assigned_on=assigned_on,
+            activity_ids=sorted({item["activity_id"] for item in created}),
+        )
     metrics.rotations += 1
     metrics.rotated_assignments += len(created)
 
