@@ -101,6 +101,30 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
             invisible.json(), {"error": "名前に使用できない文字が含まれています。"}
         )
 
+    async def test_openapi_uses_pydantic_response_models(self):
+        """APIレスポンスのPydanticモデルをOpenAPIに反映する"""
+        response = await self.client.get("/openapi.json")
+
+        self.assertEqual(response.status_code, 200)
+        spec = response.json()
+        schemas = spec["components"]["schemas"]
+        activities_response = spec["paths"]["/api/activities"]["get"]["responses"]["200"][
+            "content"
+        ]["application/json"]["schema"]
+        create_activity_response = spec["paths"]["/api/activities"]["post"]["responses"][
+            "201"
+        ]["content"]["application/json"]["schema"]
+
+        self.assertEqual(
+            activities_response, {"$ref": "#/components/schemas/ActivitiesResponse"}
+        )
+        self.assertEqual(
+            create_activity_response, {"$ref": "#/components/schemas/ActivityResponse"}
+        )
+        self.assertIn("ActivityResponse", schemas)
+        self.assertIn("AssignmentResponse", schemas)
+        self.assertIn("ErrorResponse", schemas)
+
     async def test_role_and_member_text_validation_happens_in_api(self):
         """役割名とメンバー情報の文字種検証をAPI層で行う"""
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)

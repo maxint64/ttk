@@ -15,8 +15,17 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from .config import DEFAULT_DB_PATH, DEFAULT_PID_PATH, DEFAULT_STATIC_DIR
 from . import database, events
+from .config import DEFAULT_DB_PATH, DEFAULT_PID_PATH, DEFAULT_STATIC_DIR
+from .schemas import (
+    ActivitiesResponse,
+    ActivityResponse,
+    AssignmentResponse,
+    AssignmentsResponse,
+    ErrorResponse,
+    MemberResponse,
+    RoleResponse,
+)
 
 
 MAX_TEXT_LENGTH = 144
@@ -48,9 +57,18 @@ def create_app(
             {"error": "リクエストのJSON形式が正しくありません。"}, status_code=400
         )
 
-    @app.get("/api/activities")
-    async def list_activities() -> dict[str, list[dict[str, Any]]]:
-        return {"activities": database.list_activities(db_path)}
+    error_responses = {
+        400: {"model": ErrorResponse},
+        404: {"model": ErrorResponse},
+    }
+
+    @app.get(
+        "/api/activities",
+        response_model=ActivitiesResponse,
+        responses=error_responses,
+    )
+    async def list_activities() -> ActivitiesResponse:
+        return ActivitiesResponse(activities=database.list_activities(db_path))
 
     @app.get("/api/events")
     async def event_stream(request: Request) -> StreamingResponse:
@@ -60,11 +78,18 @@ def create_app(
             headers={"Cache-Control": "no-cache"},
         )
 
-    @app.post("/api/activities", status_code=201)
-    async def create_activity(body: Any = Body(default=None)) -> dict[str, Any]:
+    @app.post(
+        "/api/activities",
+        status_code=201,
+        response_model=ActivityResponse,
+        responses=error_responses,
+    )
+    async def create_activity(body: Any = Body(default=None)) -> ActivityResponse:
         body = _read_json_object(body)
         try:
-            return database.create_activity(db_path, _read_text(body, "name"))
+            return ActivityResponse.model_validate(
+                database.create_activity(db_path, _read_text(body, "name"))
+            )
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
 
@@ -76,19 +101,33 @@ def create_app(
             raise _api_error(404, str(error)) from error
         return Response(status_code=204)
 
-    @app.post("/api/activities/{activity_id}/roles", status_code=201)
-    async def add_role(activity_id: str, body: Any = Body(default=None)) -> dict[str, Any]:
-        return _add_activity_item(db_path, activity_id, body, database.add_role)
+    @app.post(
+        "/api/activities/{activity_id}/roles",
+        status_code=201,
+        response_model=RoleResponse,
+        responses=error_responses,
+    )
+    async def add_role(activity_id: str, body: Any = Body(default=None)) -> RoleResponse:
+        return RoleResponse.model_validate(
+            _add_activity_item(db_path, activity_id, body, database.add_role)
+        )
 
-    @app.post("/api/activities/{activity_id}/members", status_code=201)
-    async def add_member(activity_id: str, body: Any = Body(default=None)) -> dict[str, Any]:
+    @app.post(
+        "/api/activities/{activity_id}/members",
+        status_code=201,
+        response_model=MemberResponse,
+        responses=error_responses,
+    )
+    async def add_member(activity_id: str, body: Any = Body(default=None)) -> MemberResponse:
         body = _read_json_object(body)
         try:
-            return database.add_member(
-                db_path,
-                _parse_id(activity_id),
-                _read_text(body, "name"),
-                _read_email(body, "email"),
+            return MemberResponse.model_validate(
+                database.add_member(
+                    db_path,
+                    _parse_id(activity_id),
+                    _read_text(body, "name"),
+                    _read_email(body, "email"),
+                )
             )
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
@@ -113,18 +152,26 @@ def create_app(
         _delete_activity_item(db_path, activity_id, member_id, database.delete_member)
         return Response(status_code=204)
 
-    @app.get("/api/activities/{activity_id}/assignments")
-    async def list_assignments(activity_id: str) -> dict[str, list[dict[str, Any]]]:
+    @app.get(
+        "/api/activities/{activity_id}/assignments",
+        response_model=AssignmentsResponse,
+        responses=error_responses,
+    )
+    async def list_assignments(activity_id: str) -> AssignmentsResponse:
         try:
             assignments = database.list_assignments(db_path, _parse_id(activity_id))
         except database.NotFoundError as error:
             raise _api_error(404, str(error)) from error
-        return {"assignments": assignments}
+        return AssignmentsResponse(assignments=assignments)
 
-    @app.get("/api/activities/{activity_id}/assignments/dates/{assigned_on}")
+    @app.get(
+        "/api/activities/{activity_id}/assignments/dates/{assigned_on}",
+        response_model=AssignmentsResponse,
+        responses=error_responses,
+    )
     async def list_assignments_on(
         activity_id: str, assigned_on: str
-    ) -> dict[str, list[dict[str, Any]]]:
+    ) -> AssignmentsResponse:
         try:
             assignments = database.list_assignments_on(
                 db_path,
@@ -133,12 +180,17 @@ def create_app(
             )
         except database.NotFoundError as error:
             raise _api_error(404, str(error)) from error
-        return {"assignments": assignments}
+        return AssignmentsResponse(assignments=assignments)
 
-    @app.post("/api/activities/{activity_id}/assignments", status_code=201)
+    @app.post(
+        "/api/activities/{activity_id}/assignments",
+        status_code=201,
+        response_model=AssignmentResponse,
+        responses=error_responses,
+    )
     async def add_assignment(
         activity_id: str, body: Any = Body(default=None)
-    ) -> dict[str, Any]:
+    ) -> AssignmentResponse:
         body = _read_json_object(body)
         try:
             assignment = database.add_assignment(
@@ -149,7 +201,7 @@ def create_app(
                 _read_optional_date(body, "assigned_on"),
             )
             events.publish_assignments_changed(1)
-            return assignment
+            return AssignmentResponse.model_validate(assignment)
         except database.ValidationError as error:
             raise _api_error(400, str(error)) from error
         except database.NotFoundError as error:
@@ -170,7 +222,11 @@ def create_app(
             raise _api_error(404, str(error)) from error
         return Response(status_code=204)
 
-    @app.api_route("/api/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
+    @app.api_route(
+        "/api/{path:path}",
+        methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+        include_in_schema=False,
+    )
     async def api_not_found(path: str) -> None:
         raise _api_error(404, "対象が見つかりませんでした。")
 
