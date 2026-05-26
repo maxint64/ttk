@@ -223,15 +223,15 @@ async function toggleAssignment(activityId, assignedOn, roleId, memberId, assign
   await loadAndRender();
 }
 
-async function toggleDayOff(activityId, assignedOn, memberId, dayOff) {
+async function toggleDayOff(activityId, assignedOn, memberId, dayOff, dayOffType) {
   const path = `/api/activities/${activityId}/members/${memberId}/days-off`;
   try {
-    if (dayOff) {
-      await apiRequest(`${path}/${assignedOn}`, { method: "DELETE" });
+    if (dayOff?.day_off_type === dayOffType) {
+      await apiRequest(`${path}/${dayOff.off_on}`, { method: "DELETE" });
     } else {
       await apiRequest(path, {
         method: "POST",
-        body: { off_on: assignedOn },
+        body: { off_on: assignedOn, day_off_type: dayOffType },
       });
     }
   } finally {

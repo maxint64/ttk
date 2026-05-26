@@ -13,6 +13,9 @@ from .config import PROJECT_ROOT
 SKIP_TYPE_ONCE = "once"
 SKIP_TYPE_UNTIL_DELETED = "until_deleted"
 VALID_SKIP_TYPES = {SKIP_TYPE_ONCE, SKIP_TYPE_UNTIL_DELETED}
+DAY_OFF_TYPE_ONCE = "once"
+DAY_OFF_TYPE_UNTIL_DELETED = "until_deleted"
+VALID_DAY_OFF_TYPES = {DAY_OFF_TYPE_ONCE, DAY_OFF_TYPE_UNTIL_DELETED}
 
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
@@ -150,21 +153,32 @@ def delete_member(db_path: str | Path, activity_id: int, member_id: int) -> None
 
 
 def add_member_day_off(
-    db_path: str | Path, activity_id: int, member_id: int, off_on: str | None = None
+    db_path: str | Path,
+    activity_id: int,
+    member_id: int,
+    off_on: str | None = None,
+    day_off_type: str = DAY_OFF_TYPE_ONCE,
 ) -> dict[str, Any]:
     off_on = _clean_assigned_on(off_on)
+    day_off_type = _clean_day_off_type(day_off_type)
     with connect(db_path) as connection:
         _require_activity(connection, activity_id)
         _require_activity_item(
             connection, "members", activity_id, member_id, "メンバーが見つかりませんでした。"
         )
+        _delete_overlapping_day_off(
+            connection, activity_id, member_id, off_on, day_off_type
+        )
         connection.execute(
             """
-            INSERT OR IGNORE INTO member_days_off
-                (activity_id, member_id, off_on, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO member_days_off
+                (activity_id, member_id, off_on, day_off_type, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(activity_id, member_id, off_on) DO UPDATE SET
+                day_off_type = excluded.day_off_type,
+                created_at = excluded.created_at
             """,
-            (activity_id, member_id, off_on, current_timestamp_ms()),
+            (activity_id, member_id, off_on, day_off_type, current_timestamp_ms()),
         )
         day_off_id = connection.execute(
             """
@@ -176,14 +190,14 @@ def add_member_day_off(
         ).fetchone()["id"]
         row = connection.execute(
             """
-            SELECT id, activity_id, member_id, off_on, created_at
+            SELECT id, activity_id, member_id, off_on, day_off_type, created_at
             FROM member_days_off
             WHERE id = ?
             """,
             (day_off_id,),
         ).fetchone()
         _, removed_count = _reassign_member_day_off_assignments(
-            connection, activity_id, member_id, off_on
+            connection, activity_id, member_id, off_on, day_off_type
         )
 
     day_off = dict(row)
@@ -211,6 +225,35 @@ def delete_member_day_off(
         )
         if cursor.rowcount == 0:
             raise NotFoundError("休み設定が見つかりませんでした。")
+
+
+def _delete_overlapping_day_off(
+    connection: sqlite3.Connection,
+    activity_id: int,
+    member_id: int,
+    off_on: str,
+    day_off_type: str,
+) -> None:
+    if day_off_type == DAY_OFF_TYPE_UNTIL_DELETED:
+        connection.execute(
+            """
+            DELETE FROM member_days_off
+            WHERE activity_id = ? AND member_id = ? AND day_off_type = ?
+            """,
+            (activity_id, member_id, DAY_OFF_TYPE_UNTIL_DELETED),
+        )
+        return
+
+    connection.execute(
+        """
+        DELETE FROM member_days_off
+        WHERE activity_id = ?
+            AND member_id = ?
+            AND day_off_type = ?
+            AND off_on <= ?
+        """,
+        (activity_id, member_id, DAY_OFF_TYPE_UNTIL_DELETED, off_on),
+    )
 
 
 def add_role_member_skip(
@@ -515,7 +558,7 @@ def _group_member_days_off(connection: sqlite3.Connection) -> dict[int, list[dic
     grouped: dict[int, list[dict[str, Any]]] = {}
     rows = connection.execute(
         """
-        SELECT id, activity_id, member_id, off_on, created_at
+        SELECT id, activity_id, member_id, off_on, day_off_type, created_at
         FROM member_days_off
         ORDER BY off_on DESC, id ASC
         """
@@ -640,13 +683,20 @@ def _next_member_id_for_rotation(
 
 
 def _reassign_member_day_off_assignments(
-    connection: sqlite3.Connection, activity_id: int, member_id: int, off_on: str
+    connection: sqlite3.Connection,
+    activity_id: int,
+    member_id: int,
+    off_on: str,
+    day_off_type: str,
 ) -> tuple[int, int]:
+    date_clause = "assigned_on = ?"
+    if day_off_type == DAY_OFF_TYPE_UNTIL_DELETED:
+        date_clause = "assigned_on >= ?"
     assignments = connection.execute(
-        """
+        f"""
         SELECT id, role_id
         FROM role_assignments
-        WHERE activity_id = ? AND member_id = ? AND assigned_on = ?
+        WHERE activity_id = ? AND member_id = ? AND {date_clause}
         ORDER BY id ASC
         """,
         (activity_id, member_id, off_on),
@@ -735,11 +785,31 @@ def _is_member_off(
         """
         SELECT id
         FROM member_days_off
-        WHERE activity_id = ? AND member_id = ? AND off_on = ?
+        WHERE activity_id = ?
+            AND member_id = ?
+            AND (
+                off_on = ?
+                OR (day_off_type = ? AND off_on <= ?)
+            )
         """,
-        (activity_id, member_id, assigned_on),
+        (
+            activity_id,
+            member_id,
+            assigned_on,
+            DAY_OFF_TYPE_UNTIL_DELETED,
+            assigned_on,
+        ),
     ).fetchone()
     return row is not None
+
+
+def _clean_day_off_type(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValidationError("休み種別は文字列で入力してください。")
+    cleaned = value.strip()
+    if cleaned not in VALID_DAY_OFF_TYPES:
+        raise ValidationError("休み種別が正しくありません。")
+    return cleaned
 
 
 def _clean_skip_type(value: str) -> str:

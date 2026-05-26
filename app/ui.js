@@ -278,21 +278,22 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
     const memberName = document.createElement("span");
     memberName.textContent = member.name;
 
-    const dayOffButton = document.createElement("button");
-    dayOffButton.type = "button";
-    dayOffButton.className = "day-off-toggle";
-    dayOffButton.setAttribute("aria-pressed", String(Boolean(dayOff)));
-    dayOffButton.textContent = dayOff ? "休み中" : "休み";
-    dayOffButton.addEventListener("click", async () => {
-      try {
-        clearErrorMessage();
-        await handlers.onToggleDayOff(activity.id, selectedDate, member.id, dayOff);
-      } catch (error) {
-        showErrorMessage(error.message);
-      }
-    });
+    const dayOffControls = document.createElement("div");
+    dayOffControls.className = "day-off-controls";
+    dayOffControls.append(
+      createDayOffButton("当日休み", "once", dayOff, activity, selectedDate, member, handlers),
+      createDayOffButton(
+        "解除まで休み",
+        "until_deleted",
+        dayOff,
+        activity,
+        selectedDate,
+        member,
+        handlers
+      )
+    );
 
-    memberHeaderInner.append(memberName, dayOffButton);
+    memberHeaderInner.append(memberName, dayOffControls);
     memberHeader.append(memberHeaderInner);
     row.append(memberHeader);
 
@@ -325,7 +326,7 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
 
         button.append(mark, createdAt);
       } else if (dayOff) {
-        button.textContent = "休み";
+        button.textContent = dayOff.day_off_type === "until_deleted" ? "継続休み" : "休み";
       } else if (skip) {
         button.textContent = skip.skip_type === "until_deleted" ? "継続スキップ" : "次回スキップ";
       }
@@ -361,6 +362,37 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
 
   table.append(tbody);
   tableWrap.append(table);
+}
+
+function createDayOffButton(
+  label,
+  dayOffType,
+  dayOff,
+  activity,
+  selectedDate,
+  member,
+  handlers
+) {
+  const dayOffButton = document.createElement("button");
+  dayOffButton.type = "button";
+  dayOffButton.className = "day-off-toggle";
+  dayOffButton.setAttribute("aria-pressed", String(dayOff?.day_off_type === dayOffType));
+  dayOffButton.textContent = label;
+  dayOffButton.addEventListener("click", async () => {
+    try {
+      clearErrorMessage();
+      await handlers.onToggleDayOff(
+        activity.id,
+        selectedDate,
+        member.id,
+        dayOff,
+        dayOffType
+      );
+    } catch (error) {
+      showErrorMessage(error.message);
+    }
+  });
+  return dayOffButton;
 }
 
 function createSkipButton(label, skipType, skip, activity, role, member, handlers) {
@@ -407,6 +439,11 @@ function findDayOff(daysOff = [], memberId, offOn) {
     (dayOff) =>
       dayOff.member_id === memberId &&
       dayOff.off_on === offOn
+  ) || daysOff.find(
+    (dayOff) =>
+      dayOff.member_id === memberId &&
+      dayOff.day_off_type === "until_deleted" &&
+      dayOff.off_on <= offOn
   );
 }
 

@@ -166,11 +166,15 @@ def create_app(
             parsed_activity_id = _parse_id(activity_id)
             parsed_member_id = _parse_id(member_id)
             off_on = _read_optional_date(body, "off_on")
+            day_off_type = (
+                _read_optional_text(body, "day_off_type") or database.DAY_OFF_TYPE_ONCE
+            )
             day_off = database.add_member_day_off(
                 db_path,
                 parsed_activity_id,
                 parsed_member_id,
                 off_on,
+                day_off_type,
             )
             return MemberDayOffResponse.model_validate(day_off)
         except database.AvailabilityReassignError as error:
@@ -465,6 +469,7 @@ def _api_error(status_code: int, message: str) -> HTTPException:
 def _field_label(field_name: str) -> str:
     labels = {
         "assigned_on": "担当日",
+        "day_off_type": "休み種別",
         "email": "メールアドレス",
         "member_id": "メンバーID",
         "name": "名前",

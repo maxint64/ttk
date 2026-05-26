@@ -97,9 +97,10 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         day_off = await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/members/{member['id']}/days-off",
-            {"off_on": "2026-05-24"},
+            {"off_on": "2026-05-24", "day_off_type": "until_deleted"},
             201,
         )
+        self.assertEqual(day_off["day_off_type"], "until_deleted")
         skip = await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/roles/{role['id']}/skips",

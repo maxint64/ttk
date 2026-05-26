@@ -374,6 +374,12 @@ h1 {
   color: #76510f;
 }
 
+.day-off-controls {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .skip-controls {
   display: grid;
   gap: 4px;

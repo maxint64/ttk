@@ -31,6 +31,7 @@ class MemberDayOffResponse(BaseModel):
     activity_id: int
     member_id: int
     off_on: str
+    day_off_type: str
     created_at: str
 
 
