@@ -160,17 +160,17 @@ export function hasPendingUserInput() {
 }
 
 function setupDateControls(node, activity, selectedDate, handlers) {
-  const previousButton = node.querySelector(".date-previous");
   const todayButton = node.querySelector(".date-today");
+  const previousButton = node.querySelector(".date-previous");
   const nextButton = node.querySelector(".date-next");
   const dateInput = node.querySelector(".assignment-date-input");
 
   dateInput.value = selectedDate;
-  previousButton.addEventListener("click", () => {
-    handlers.onSelectAssignmentDate(activity.id, shiftDate(selectedDate, -1));
-  });
   todayButton.addEventListener("click", () => {
     handlers.onSelectAssignmentDate(activity.id, today);
+  });
+  previousButton.addEventListener("click", () => {
+    handlers.onSelectAssignmentDate(activity.id, shiftDate(selectedDate, -1));
   });
   nextButton.addEventListener("click", () => {
     handlers.onSelectAssignmentDate(activity.id, shiftDate(selectedDate, 1));

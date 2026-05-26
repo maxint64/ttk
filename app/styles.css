@@ -272,14 +272,7 @@ h1 {
   align-items: center;
   display: grid;
   gap: 10px;
-  grid-template-columns: auto repeat(3, auto) minmax(160px, 1fr);
-}
-
-.date-controls-label {
-  color: var(--muted);
-  font-size: 0.88rem;
-  font-weight: 800;
-  white-space: nowrap;
+  grid-template-columns: auto auto minmax(160px, 220px) auto;
 }
 
 .date-controls button {
