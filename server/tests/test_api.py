@@ -29,7 +29,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         member = await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/members",
-            {"name": "山田", "email": "yamada@example.com"},
+            {"name": "Aさん", "email": "a@example.com"},
             201,
         )
         role = await self.request_json(
@@ -87,7 +87,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         member = await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/members",
-            {"name": "山田", "email": "yamada@example.com"},
+            {"name": "Aさん", "email": "a@example.com"},
             201,
         )
         role = await self.request_json(
@@ -170,7 +170,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
 
         bad_member_name = await self.client.post(
             f"/api/activities/{activity['id']}/members",
-            json={"name": "\u200b山田", "email": "yamada@example.com"},
+            json={"name": "\u200bAさん", "email": "a@example.com"},
         )
         self.assertEqual(bad_member_name.status_code, 400)
         self.assertEqual(
@@ -179,7 +179,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
 
         bad_member_email = await self.client.post(
             f"/api/activities/{activity['id']}/members",
-            json={"name": "山田", "email": "yamada\u200c@example.com"},
+            json={"name": "Aさん", "email": "a\u200c@example.com"},
         )
         self.assertEqual(bad_member_email.status_code, 400)
         self.assertEqual(
@@ -192,7 +192,7 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/members",
-            {"name": "田中", "email": "tanaka@example.com"},
+            {"name": "Aさん", "email": "a@example.com"},
             201,
         )
         await self.request_json(
@@ -218,12 +218,12 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/members",
-            {"name": "山田", "email": "same@example.com"},
+            {"name": "Aさん", "email": "same@example.com"},
             201,
         )
         duplicate_email = await self.client.post(
             f"/api/activities/{activity['id']}/members",
-            json={"name": "佐藤", "email": "SAME@example.com"},
+            json={"name": "Bさん", "email": "SAME@example.com"},
         )
         self.assertEqual(duplicate_email.status_code, 400)
         self.assertEqual(

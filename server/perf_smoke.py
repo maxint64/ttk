@@ -209,7 +209,7 @@ def setup_activity(
             "POST",
             f"{base_url}/api/activities/{activity_id}/members",
             {
-                "name": f"会員{plan.index}-{member_index}",
+                "name": perf_member_name(plan.index, member_index),
                 "email": f"perf-{plan.index}-{member_index}@example.com",
             },
             expected_status=201,
@@ -256,6 +256,11 @@ def rotate_assignments(db_path: Path, assigned_on: str, metrics: Metrics) -> Non
         )
     metrics.rotations += 1
     metrics.rotated_assignments += len(created)
+
+
+def perf_member_name(plan_index: int, member_index: int) -> str:
+    prefix = chr(ord("A") + ((member_index - 1) % 26))
+    return f"{prefix}さん{plan_index}-{member_index}"
 
 
 def read_assignments(base_url: str, plan: ActivityPlan, metrics: Metrics) -> None:

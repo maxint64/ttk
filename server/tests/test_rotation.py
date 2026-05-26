@@ -26,10 +26,10 @@ class RotationTest(unittest.TestCase):
             database.init_db(db_path)
             activity = database.create_activity(db_path, "朝会")
             first = database.add_member(
-                db_path, activity["id"], "田中", "tanaka@example.com"
+                db_path, activity["id"], "Aさん", "a@example.com"
             )
             second = database.add_member(
-                db_path, activity["id"], "佐藤", "sato@example.com"
+                db_path, activity["id"], "Bさん", "b@example.com"
             )
             role = database.add_role(db_path, activity["id"], "司会")
             database.add_assignment(
@@ -49,9 +49,9 @@ class RotationTest(unittest.TestCase):
             database.init_db(db_path)
             activity = database.create_activity(db_path, "朝会")
             first = database.add_member(
-                db_path, activity["id"], "田中", "tanaka@example.com"
+                db_path, activity["id"], "Aさん", "a@example.com"
             )
-            database.add_member(db_path, activity["id"], "佐藤", "sato@example.com")
+            database.add_member(db_path, activity["id"], "Bさん", "b@example.com")
             role = database.add_role(db_path, activity["id"], "司会")
             database.add_assignment(
                 db_path, activity["id"], role["id"], first["id"], "2026-05-23"
@@ -71,7 +71,7 @@ class RotationTest(unittest.TestCase):
                 output.getvalue().splitlines(),
                 [
                     "rotated 1 assignments",
-                    "2026-05-24 朝会 / 司会 -> 佐藤 <sato@example.com>",
+                    "2026-05-24 朝会 / 司会 -> Bさん <b@example.com>",
                 ],
             )
 
