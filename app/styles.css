@@ -371,10 +371,16 @@ h1 {
   color: #76510f;
 }
 
+.skip-controls {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
 .assignment-cell-stack {
   display: grid;
-  grid-template-rows: 54px 30px;
-  min-height: 84px;
+  grid-template-rows: 54px 32px;
+  min-height: 86px;
 }
 
 .assignment-table thead th:first-child {

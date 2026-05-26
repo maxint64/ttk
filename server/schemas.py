@@ -31,6 +31,7 @@ class RoleMemberSkipResponse(BaseModel):
     activity_id: int
     role_id: int
     member_id: int
+    skip_type: str
     created_at: str
 
 

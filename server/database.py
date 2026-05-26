@@ -10,6 +10,10 @@ from alembic.config import Config
 
 from .config import PROJECT_ROOT
 
+SKIP_TYPE_ONCE = "once"
+SKIP_TYPE_UNTIL_DELETED = "until_deleted"
+VALID_SKIP_TYPES = {SKIP_TYPE_ONCE, SKIP_TYPE_UNTIL_DELETED}
+
 
 def connect(db_path: str | Path) -> sqlite3.Connection:
     connection = sqlite3.connect(db_path)
@@ -138,8 +142,13 @@ def delete_member(db_path: str | Path, activity_id: int, member_id: int) -> None
 
 
 def add_role_member_skip(
-    db_path: str | Path, activity_id: int, role_id: int, member_id: int
+    db_path: str | Path,
+    activity_id: int,
+    role_id: int,
+    member_id: int,
+    skip_type: str = SKIP_TYPE_ONCE,
 ) -> dict[str, Any]:
+    skip_type = _clean_skip_type(skip_type)
     with connect(db_path) as connection:
         _require_activity(connection, activity_id)
         _require_activity_item(
@@ -150,11 +159,14 @@ def add_role_member_skip(
         )
         connection.execute(
             """
-            INSERT OR IGNORE INTO role_member_skips
-                (activity_id, role_id, member_id, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO role_member_skips
+                (activity_id, role_id, member_id, skip_type, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(activity_id, role_id, member_id) DO UPDATE SET
+                skip_type = excluded.skip_type,
+                created_at = excluded.created_at
             """,
-            (activity_id, role_id, member_id, current_timestamp_ms()),
+            (activity_id, role_id, member_id, skip_type, current_timestamp_ms()),
         )
         skip_id = connection.execute(
             """
@@ -166,7 +178,7 @@ def add_role_member_skip(
         ).fetchone()["id"]
         row = connection.execute(
             """
-            SELECT id, activity_id, role_id, member_id, created_at
+            SELECT id, activity_id, role_id, member_id, skip_type, created_at
             FROM role_member_skips
             WHERE id = ?
             """,
@@ -431,7 +443,7 @@ def _group_role_member_skips(
     grouped: dict[int, list[dict[str, Any]]] = {}
     rows = connection.execute(
         """
-        SELECT id, activity_id, role_id, member_id, created_at
+        SELECT id, activity_id, role_id, member_id, skip_type, created_at
         FROM role_member_skips
         ORDER BY id ASC
         """
@@ -526,23 +538,32 @@ def _next_member_id_for_rotation(
 
     for offset in range(1, len(member_ids) + 1):
         candidate = member_ids[(current_index + offset) % len(member_ids)]
-        if _consume_role_member_skip(connection, activity_id, role_id, candidate):
+        if _skip_role_member_for_rotation(connection, activity_id, role_id, candidate):
             continue
         return candidate
     return None
 
 
-def _consume_role_member_skip(
+def _skip_role_member_for_rotation(
     connection: sqlite3.Connection, activity_id: int, role_id: int, member_id: int
 ) -> bool:
-    cursor = connection.execute(
+    skip = connection.execute(
         """
-        DELETE FROM role_member_skips
+        SELECT id, skip_type
+        FROM role_member_skips
         WHERE activity_id = ? AND role_id = ? AND member_id = ?
         """,
         (activity_id, role_id, member_id),
-    )
-    return cursor.rowcount > 0
+    ).fetchone()
+    if skip is None:
+        return False
+
+    if skip["skip_type"] == SKIP_TYPE_ONCE:
+        connection.execute(
+            "DELETE FROM role_member_skips WHERE id = ?",
+            (skip["id"],),
+        )
+    return True
 
 
 def _is_role_member_skipped(
@@ -557,6 +578,15 @@ def _is_role_member_skipped(
         (activity_id, role_id, member_id),
     ).fetchone()
     return row is not None
+
+
+def _clean_skip_type(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValidationError("スキップ種別は文字列で入力してください。")
+    cleaned = value.strip()
+    if cleaned not in VALID_SKIP_TYPES:
+        raise ValidationError("スキップ種別が正しくありません。")
+    return cleaned
 
 
 def _clean_assigned_on(value: str | None) -> str:

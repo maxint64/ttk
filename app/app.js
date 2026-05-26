@@ -216,15 +216,15 @@ async function toggleAssignment(activityId, assignedOn, roleId, memberId, assign
   await loadAndRender();
 }
 
-async function toggleSkip(activityId, roleId, memberId, skip) {
+async function toggleSkip(activityId, roleId, memberId, skip, skipType) {
   const path = `/api/activities/${activityId}/roles/${roleId}/skips`;
   try {
-    if (skip) {
+    if (skip?.skip_type === skipType) {
       await apiRequest(`${path}/${memberId}`, { method: "DELETE" });
     } else {
       await apiRequest(path, {
         method: "POST",
-        body: { member_id: memberId },
+        body: { member_id: memberId, skip_type: skipType },
       });
     }
   } finally {

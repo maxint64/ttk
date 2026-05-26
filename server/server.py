@@ -165,11 +165,13 @@ def create_app(
             parsed_activity_id = _parse_id(activity_id)
             parsed_role_id = _parse_id(role_id)
             parsed_member_id = _read_body_id(body, "member_id")
+            skip_type = _read_optional_text(body, "skip_type") or database.SKIP_TYPE_ONCE
             skip = database.add_role_member_skip(
                 db_path,
                 parsed_activity_id,
                 parsed_role_id,
                 parsed_member_id,
+                skip_type,
             )
             return RoleMemberSkipResponse.model_validate(skip)
         except database.ValidationError as error:
@@ -354,6 +356,12 @@ def _read_text(body: dict[str, Any], key: str) -> str:
     return _clean_text(body.get(key, ""), key)
 
 
+def _read_optional_text(body: dict[str, Any], key: str) -> str | None:
+    if key not in body or body[key] is None:
+        return None
+    return _clean_text(body[key], key)
+
+
 def _read_email(body: dict[str, Any], key: str) -> str:
     cleaned = _clean_text(body.get(key, ""), key).lower()
     if "@" not in cleaned or cleaned.startswith("@") or cleaned.endswith("@"):
@@ -410,6 +418,7 @@ def _field_label(field_name: str) -> str:
         "member_id": "メンバーID",
         "name": "名前",
         "role_id": "役割ID",
+        "skip_type": "スキップ種別",
     }
     return labels.get(field_name, field_name)
 

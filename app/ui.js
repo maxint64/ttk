@@ -303,7 +303,7 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
 
         button.append(mark, createdAt);
       } else if (skip) {
-        button.textContent = "スキップ";
+        button.textContent = skip.skip_type === "until_deleted" ? "継続スキップ" : "次回スキップ";
       }
       button.addEventListener("click", async () => {
         try {
@@ -320,21 +320,14 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
         }
       });
 
-      const skipButton = document.createElement("button");
-      skipButton.type = "button";
-      skipButton.className = "skip-toggle";
-      skipButton.setAttribute("aria-pressed", String(Boolean(skip)));
-      skipButton.textContent = skip ? "スキップ中" : "スキップ";
-      skipButton.addEventListener("click", async () => {
-        try {
-          clearErrorMessage();
-          await handlers.onToggleSkip(activity.id, role.id, member.id, skip);
-        } catch (error) {
-          showErrorMessage(error.message);
-        }
-      });
+      const skipControls = document.createElement("div");
+      skipControls.className = "skip-controls";
+      skipControls.append(
+        createSkipButton("次回担当スキップ", "once", skip, activity, role, member, handlers),
+        createSkipButton("解除までスキップ", "until_deleted", skip, activity, role, member, handlers)
+      );
 
-      cell.append(button, skipButton);
+      cell.append(button, skipControls);
       td.append(cell);
       row.append(td);
     });
@@ -344,6 +337,23 @@ function renderAssignmentTable(node, activity, selectedDate, handlers) {
 
   table.append(tbody);
   tableWrap.append(table);
+}
+
+function createSkipButton(label, skipType, skip, activity, role, member, handlers) {
+  const skipButton = document.createElement("button");
+  skipButton.type = "button";
+  skipButton.className = "skip-toggle";
+  skipButton.setAttribute("aria-pressed", String(skip?.skip_type === skipType));
+  skipButton.textContent = label;
+  skipButton.addEventListener("click", async () => {
+    try {
+      clearErrorMessage();
+      await handlers.onToggleSkip(activity.id, role.id, member.id, skip, skipType);
+    } catch (error) {
+      showErrorMessage(error.message);
+    }
+  });
+  return skipButton;
 }
 
 function formatAssignmentMinute(value) {

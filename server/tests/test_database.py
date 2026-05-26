@@ -182,6 +182,40 @@ class DatabaseTest(unittest.TestCase):
             database.get_activity(self.db_path, activity["id"])["role_member_skips"], []
         )
 
+    def test_rotate_assignments_keeps_until_deleted_skip(self):
+        """解除までスキップはローテーションで消費せず残す"""
+        activity = database.create_activity(self.db_path, "朝会")
+        first = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        second = database.add_member(
+            self.db_path, activity["id"], "佐藤", "sato@example.com"
+        )
+        third = database.add_member(
+            self.db_path, activity["id"], "鈴木", "suzuki@example.com"
+        )
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        database.add_assignment(
+            self.db_path, activity["id"], role["id"], first["id"], "2026-05-23"
+        )
+        skip = database.add_role_member_skip(
+            self.db_path,
+            activity["id"],
+            role["id"],
+            second["id"],
+            database.SKIP_TYPE_UNTIL_DELETED,
+        )
+
+        first_rotation = database.rotate_assignments(self.db_path, "2026-05-24")
+        second_rotation = database.rotate_assignments(self.db_path, "2026-05-25")
+
+        self.assertEqual(first_rotation[0]["member_id"], third["id"])
+        self.assertEqual(second_rotation[0]["member_id"], first["id"])
+        self.assertEqual(
+            database.get_activity(self.db_path, activity["id"])["role_member_skips"],
+            [skip],
+        )
+
     def test_rotate_assignments_consumes_skips_until_available_member(self):
         """全員スキップ中の場合は担当を作らずスキップを消費する"""
         activity = database.create_activity(self.db_path, "朝会")
@@ -250,6 +284,7 @@ class DatabaseTest(unittest.TestCase):
             first["id"],
         )
         self.assertEqual(skip["member_id"], first["id"])
+        self.assertEqual(skip["skip_type"], database.SKIP_TYPE_ONCE)
 
         database.add_assignment(
             self.db_path, activity["id"], role["id"], second["id"], "2026-05-25"
@@ -259,6 +294,31 @@ class DatabaseTest(unittest.TestCase):
         self.assertEqual(created[0]["member_id"], second["id"])
         self.assertEqual(
             database.get_activity(self.db_path, activity["id"])["role_member_skips"], []
+        )
+
+    def test_role_member_skip_type_can_be_changed(self):
+        """同じスキップ設定は種別を切り替えられる"""
+        activity = database.create_activity(self.db_path, "朝会")
+        member = database.add_member(
+            self.db_path, activity["id"], "田中", "tanaka@example.com"
+        )
+        role = database.add_role(self.db_path, activity["id"], "司会")
+        once = database.add_role_member_skip(
+            self.db_path, activity["id"], role["id"], member["id"]
+        )
+        until_deleted = database.add_role_member_skip(
+            self.db_path,
+            activity["id"],
+            role["id"],
+            member["id"],
+            database.SKIP_TYPE_UNTIL_DELETED,
+        )
+
+        self.assertEqual(once["id"], until_deleted["id"])
+        self.assertEqual(until_deleted["skip_type"], database.SKIP_TYPE_UNTIL_DELETED)
+        self.assertEqual(
+            database.get_activity(self.db_path, activity["id"])["role_member_skips"],
+            [until_deleted],
         )
 
     def test_skip_constraint_is_scoped_by_role(self):

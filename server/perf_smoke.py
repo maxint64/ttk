@@ -289,10 +289,11 @@ def toggle_skip(
         role = rng.choice(plan.roles)
         member = rng.choice(plan.members)
         key = (role["id"], member["id"])
+        skip_type = rng.choice(["once", "until_deleted"])
         skip = request_json(
             "POST",
             skip_path(base_url, plan, role["id"]),
-            {"member_id": member["id"]},
+            {"member_id": member["id"], "skip_type": skip_type},
             expected_status=201,
         )
         plan.skips[key] = skip

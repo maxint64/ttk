@@ -97,9 +97,10 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         skip = await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/roles/{role['id']}/skips",
-            {"member_id": member["id"]},
+            {"member_id": member["id"], "skip_type": "until_deleted"},
             201,
         )
+        self.assertEqual(skip["skip_type"], "until_deleted")
 
         index = await self.request_json("GET", "/api/activities")
         self.assertEqual(index["activities"][0]["role_member_skips"], [skip])
