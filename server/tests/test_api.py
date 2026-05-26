@@ -81,8 +81,8 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         index = await self.request_json("GET", "/api/activities")
         self.assertEqual(index["activities"], [])
 
-    async def test_role_member_skip_flow(self):
-        """APIでスキップを設定・解除できる"""
+    async def test_member_day_off_and_role_member_skip_flow(self):
+        """APIで休みとスキップを設定・解除できる"""
         activity = await self.request_json("POST", "/api/activities", {"name": "勉強会"}, 201)
         member = await self.request_json(
             "POST",
@@ -94,6 +94,12 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
             "POST", f"/api/activities/{activity['id']}/roles", {"name": "発表"}, 201
         )
 
+        day_off = await self.request_json(
+            "POST",
+            f"/api/activities/{activity['id']}/members/{member['id']}/days-off",
+            {"off_on": "2026-05-24"},
+            201,
+        )
         skip = await self.request_json(
             "POST",
             f"/api/activities/{activity['id']}/roles/{role['id']}/skips",
@@ -103,14 +109,23 @@ class ApiTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(skip["skip_type"], "until_deleted")
 
         index = await self.request_json("GET", "/api/activities")
+        self.assertEqual(index["activities"][0]["member_days_off"], [day_off])
         self.assertEqual(index["activities"][0]["role_member_skips"], [skip])
 
+        await self.request_empty(
+            "DELETE",
+            (
+                f"/api/activities/{activity['id']}/members/{member['id']}"
+                "/days-off/2026-05-24"
+            ),
+        )
         await self.request_empty(
             "DELETE",
             f"/api/activities/{activity['id']}/roles/{role['id']}/skips/{member['id']}",
         )
 
         index = await self.request_json("GET", "/api/activities")
+        self.assertEqual(index["activities"][0]["member_days_off"], [])
         self.assertEqual(index["activities"][0]["role_member_skips"], [])
 
     async def test_validation_errors_keep_existing_shape(self):

@@ -349,6 +349,7 @@ h1 {
   overflow-wrap: anywhere;
 }
 
+.day-off-toggle,
 .skip-toggle {
   background: #fff;
   border: 1px solid var(--line);
@@ -360,11 +361,13 @@ h1 {
   white-space: nowrap;
 }
 
+.day-off-toggle:hover,
 .skip-toggle:hover {
   background: rgba(23, 107, 91, 0.08);
   color: var(--primary-strong);
 }
 
+.day-off-toggle[aria-pressed="true"],
 .skip-toggle[aria-pressed="true"] {
   background: #fff7dc;
   border-color: #e3c46f;
@@ -547,6 +550,7 @@ h1 {
     width: 24px;
   }
 
+  .day-off-toggle,
   .skip-toggle {
     width: auto;
   }

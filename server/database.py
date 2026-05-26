@@ -43,6 +43,12 @@ class ValidationError(Exception):
     pass
 
 
+class AvailabilityReassignError(ValidationError):
+    def __init__(self, message: str, setting: dict[str, Any]):
+        super().__init__(message)
+        self.setting = setting
+
+
 def list_activities(db_path: str | Path) -> list[dict[str, Any]]:
     with connect(db_path) as connection:
         activities = [
@@ -54,12 +60,14 @@ def list_activities(db_path: str | Path) -> list[dict[str, Any]]:
         roles = _group_items(connection, "roles")
         members = _group_items(connection, "members")
         assignments = _group_assignments(connection)
+        member_days_off = _group_member_days_off(connection)
         role_member_skips = _group_role_member_skips(connection)
 
     for activity in activities:
         activity["roles"] = roles.get(activity["id"], [])
         activity["members"] = members.get(activity["id"], [])
         activity["assignments"] = assignments.get(activity["id"], [])
+        activity["member_days_off"] = member_days_off.get(activity["id"], [])
         activity["role_member_skips"] = role_member_skips.get(activity["id"], [])
 
     return activities
@@ -139,6 +147,70 @@ def delete_role(db_path: str | Path, activity_id: int, role_id: int) -> None:
 
 def delete_member(db_path: str | Path, activity_id: int, member_id: int) -> None:
     _delete_activity_item(db_path, "members", activity_id, member_id)
+
+
+def add_member_day_off(
+    db_path: str | Path, activity_id: int, member_id: int, off_on: str | None = None
+) -> dict[str, Any]:
+    off_on = _clean_assigned_on(off_on)
+    with connect(db_path) as connection:
+        _require_activity(connection, activity_id)
+        _require_activity_item(
+            connection, "members", activity_id, member_id, "メンバーが見つかりませんでした。"
+        )
+        connection.execute(
+            """
+            INSERT OR IGNORE INTO member_days_off
+                (activity_id, member_id, off_on, created_at)
+            VALUES (?, ?, ?, ?)
+            """,
+            (activity_id, member_id, off_on, current_timestamp_ms()),
+        )
+        day_off_id = connection.execute(
+            """
+            SELECT id
+            FROM member_days_off
+            WHERE activity_id = ? AND member_id = ? AND off_on = ?
+            """,
+            (activity_id, member_id, off_on),
+        ).fetchone()["id"]
+        row = connection.execute(
+            """
+            SELECT id, activity_id, member_id, off_on, created_at
+            FROM member_days_off
+            WHERE id = ?
+            """,
+            (day_off_id,),
+        ).fetchone()
+        _, removed_count = _reassign_member_day_off_assignments(
+            connection, activity_id, member_id, off_on
+        )
+
+    day_off = dict(row)
+    if removed_count:
+        raise AvailabilityReassignError(
+            (
+                "休みを設定しましたが、担当できる次のメンバーが見つからない担当が"
+                f"{removed_count}件あります。"
+            ),
+            day_off,
+        )
+    return day_off
+
+
+def delete_member_day_off(
+    db_path: str | Path, activity_id: int, member_id: int, off_on: str
+) -> None:
+    with connect(db_path) as connection:
+        cursor = connection.execute(
+            """
+            DELETE FROM member_days_off
+            WHERE activity_id = ? AND member_id = ? AND off_on = ?
+            """,
+            (activity_id, member_id, _clean_assigned_on(off_on)),
+        )
+        if cursor.rowcount == 0:
+            raise NotFoundError("休み設定が見つかりませんでした。")
 
 
 def add_role_member_skip(
@@ -245,6 +317,8 @@ def add_assignment(
         _require_activity_item(
             connection, "members", activity_id, member_id, "メンバーが見つかりませんでした。"
         )
+        if _is_member_off(connection, activity_id, member_id, assigned_on):
+            raise ValidationError("このメンバーは指定日に休みです。")
         if _is_role_member_skipped(connection, activity_id, role_id, member_id):
             raise ValidationError("このメンバーは指定した役割をスキップ中です。")
 
@@ -318,7 +392,7 @@ def rotate_assignments(db_path: str | Path, target_on: str | None = None) -> lis
                 continue
 
             next_member_id = _next_member_id_for_rotation(
-                connection, activity_id, role_id, member_ids, latest["member_id"]
+                connection, activity_id, role_id, member_ids, latest["member_id"], target_on
             )
             if next_member_id is None:
                 continue
@@ -437,6 +511,24 @@ def _group_assignments(connection: sqlite3.Connection) -> dict[int, list[dict[st
     return grouped
 
 
+def _group_member_days_off(connection: sqlite3.Connection) -> dict[int, list[dict[str, Any]]]:
+    grouped: dict[int, list[dict[str, Any]]] = {}
+    rows = connection.execute(
+        """
+        SELECT id, activity_id, member_id, off_on, created_at
+        FROM member_days_off
+        ORDER BY off_on DESC, id ASC
+        """
+    ).fetchall()
+
+    for row in rows:
+        day_off = dict(row)
+        activity_id = day_off["activity_id"]
+        grouped.setdefault(activity_id, []).append(day_off)
+
+    return grouped
+
+
 def _group_role_member_skips(
     connection: sqlite3.Connection,
 ) -> dict[int, list[dict[str, Any]]]:
@@ -530,6 +622,7 @@ def _next_member_id_for_rotation(
     role_id: int,
     member_ids: list[int],
     current_member_id: int,
+    assigned_on: str,
 ) -> int | None:
     try:
         current_index = member_ids.index(current_member_id)
@@ -538,10 +631,65 @@ def _next_member_id_for_rotation(
 
     for offset in range(1, len(member_ids) + 1):
         candidate = member_ids[(current_index + offset) % len(member_ids)]
+        if _is_member_off(connection, activity_id, candidate, assigned_on):
+            continue
         if _skip_role_member_for_rotation(connection, activity_id, role_id, candidate):
             continue
         return candidate
     return None
+
+
+def _reassign_member_day_off_assignments(
+    connection: sqlite3.Connection, activity_id: int, member_id: int, off_on: str
+) -> tuple[int, int]:
+    assignments = connection.execute(
+        """
+        SELECT id, role_id
+        FROM role_assignments
+        WHERE activity_id = ? AND member_id = ? AND assigned_on = ?
+        ORDER BY id ASC
+        """,
+        (activity_id, member_id, off_on),
+    ).fetchall()
+    if not assignments:
+        return 0, 0
+
+    members = connection.execute(
+        """
+        SELECT id
+        FROM members
+        WHERE activity_id = ?
+        ORDER BY id ASC
+        """,
+        (activity_id,),
+    ).fetchall()
+    member_ids = [member["id"] for member in members]
+    reassigned_count = 0
+    removed_count = 0
+
+    for assignment in assignments:
+        next_member_id = _next_member_id_for_rotation(
+            connection, activity_id, assignment["role_id"], member_ids, member_id, off_on
+        )
+        if next_member_id is None:
+            connection.execute(
+                "DELETE FROM role_assignments WHERE id = ?",
+                (assignment["id"],),
+            )
+            removed_count += 1
+            continue
+
+        connection.execute(
+            """
+            UPDATE role_assignments
+            SET member_id = ?, created_at = ?
+            WHERE id = ?
+            """,
+            (next_member_id, current_timestamp_ms(), assignment["id"]),
+        )
+        reassigned_count += 1
+
+    return reassigned_count, removed_count
 
 
 def _skip_role_member_for_rotation(
@@ -576,6 +724,20 @@ def _is_role_member_skipped(
         WHERE activity_id = ? AND role_id = ? AND member_id = ?
         """,
         (activity_id, role_id, member_id),
+    ).fetchone()
+    return row is not None
+
+
+def _is_member_off(
+    connection: sqlite3.Connection, activity_id: int, member_id: int, assigned_on: str
+) -> bool:
+    row = connection.execute(
+        """
+        SELECT id
+        FROM member_days_off
+        WHERE activity_id = ? AND member_id = ? AND off_on = ?
+        """,
+        (activity_id, member_id, assigned_on),
     ).fetchone()
     return row is not None
 
