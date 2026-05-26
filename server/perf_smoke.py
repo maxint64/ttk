@@ -29,6 +29,7 @@ class ActivityPlan:
     requested_role_count: int
     members: list[dict[str, Any]] = field(default_factory=list)
     roles: list[dict[str, Any]] = field(default_factory=list)
+    skips: dict[tuple[int, int], dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
@@ -42,6 +43,9 @@ class Metrics:
     rotations: int = 0
     rotated_assignments: int = 0
     assignment_reads: int = 0
+    skip_toggles: int = 0
+    skips_created: int = 0
+    skips_deleted: int = 0
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,6 +64,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-roles", type=positive_int, default=10)
     parser.add_argument("--rotations", type=non_negative_int, default=100)
     parser.add_argument("--reads", type=non_negative_int, default=1000)
+    parser.add_argument("--skips", type=non_negative_int, default=100)
     parser.add_argument("--random-seed", type=int, default=1)
     parser.add_argument(
         "--base-date",
@@ -92,6 +97,7 @@ def main() -> None:
         f"roles={args.min_roles}-{args.max_roles}, "
         f"rotations={args.rotations}, "
         f"reads={args.reads}, "
+        f"skips={args.skips}, "
         f"base_date={args.base_date}, "
         f"random_seed={args.random_seed}",
         flush=True,
@@ -161,18 +167,34 @@ def run_mixed_operations(
     ]
     operations.extend(("rotate", assigned_on) for assigned_on in rotation_dates)
     operations.extend(("read", rng.randrange(len(plans))) for _ in range(args.reads))
+    operations.extend(("skip", rng.randrange(len(plans))) for _ in range(args.skips))
     rng.shuffle(operations)
+    total_operations = len(operations)
 
-    for done, (operation, value) in enumerate(operations, start=1):
+    done = 0
+    deferred_skips = 0
+    while operations:
+        operation, value = operations.pop(0)
         if operation == "setup":
             setup_activity(base_url, plans[int(value)], base_date.isoformat(), metrics)
         elif operation == "rotate":
             rotate_assignments(db_path, str(value), metrics)
         elif operation == "read":
             read_assignments(base_url, plans[int(value)], metrics)
+        elif operation == "skip":
+            plan = plans[int(value)]
+            if not plan.members or not plan.roles:
+                operations.append((operation, value))
+                deferred_skips += 1
+                if deferred_skips > len(plans) + args.skips:
+                    raise RuntimeError("スキップ操作を実行できる活動がありません。")
+                continue
+            toggle_skip(base_url, plan, rng, metrics)
+            deferred_skips = 0
         else:
             raise RuntimeError(f"unknown operation: {operation}")
-        print_progress("mixed operations", done, len(operations))
+        done += 1
+        print_progress("mixed operations", done, total_operations)
 
     return metrics
 
@@ -245,6 +267,49 @@ def read_assignments(base_url: str, plan: ActivityPlan, metrics: Metrics) -> Non
     metrics.assignment_reads += 1
 
 
+def toggle_skip(
+    base_url: str, plan: ActivityPlan, rng: random.Random, metrics: Metrics
+) -> None:
+    total_pairs = len(plan.roles) * len(plan.members)
+    should_delete = plan.skips and (
+        rng.random() < 0.5 or len(plan.skips) >= total_pairs
+    )
+
+    if should_delete:
+        role_id, member_id = rng.choice(list(plan.skips))
+        response = request_json(
+            "DELETE",
+            skip_path(base_url, plan, role_id, member_id),
+            expected_status={204, 404},
+        )
+        plan.skips.pop((role_id, member_id), None)
+        if response["_status"] == 204:
+            metrics.skips_deleted += 1
+    else:
+        role = rng.choice(plan.roles)
+        member = rng.choice(plan.members)
+        key = (role["id"], member["id"])
+        skip = request_json(
+            "POST",
+            skip_path(base_url, plan, role["id"]),
+            {"member_id": member["id"]},
+            expected_status=201,
+        )
+        plan.skips[key] = skip
+        metrics.skips_created += 1
+
+    metrics.skip_toggles += 1
+
+
+def skip_path(
+    base_url: str, plan: ActivityPlan, role_id: int, member_id: int | None = None
+) -> str:
+    path = f"{base_url}/api/activities/{plan.activity['id']}/roles/{role_id}/skips"
+    if member_id is not None:
+        path = f"{path}/{member_id}"
+    return path
+
+
 def wait_for_api(base_url: str, timeout: int) -> None:
     deadline = time.monotonic() + timeout
     last_error: Exception | None = None
@@ -264,7 +329,7 @@ def request_json(
     method: str,
     url: str,
     payload: dict[str, Any] | None = None,
-    expected_status: int = 200,
+    expected_status: int | set[int] = 200,
 ) -> dict[str, Any]:
     body = None
     headers = {}
@@ -276,12 +341,20 @@ def request_json(
     try:
         with urllib.request.urlopen(request, timeout=30) as response:
             raw = response.read()
-            if response.status != expected_status:
+            expected_statuses = normalize_expected_status(expected_status)
+            if response.status not in expected_statuses:
                 raise RuntimeError(f"{method} {url} returned HTTP {response.status}")
             if not raw:
-                return {}
-            return json.loads(raw.decode("utf-8"))
+                return {"_status": response.status}
+            parsed = json.loads(raw.decode("utf-8"))
+            if isinstance(parsed, dict):
+                parsed.setdefault("_status", response.status)
+            return parsed
     except urllib.error.HTTPError as error:
+        expected_statuses = normalize_expected_status(expected_status)
+        if error.code in expected_statuses:
+            error.read()
+            return {"_status": error.code}
         detail = error.read().decode("utf-8", errors="replace")
         raise RuntimeError(
             f"{method} {url} returned HTTP {error.code}: {detail}"
@@ -309,6 +382,9 @@ def print_summary(
     print(f"rotations: {metrics.rotations}", flush=True)
     print(f"rotated_assignments: {metrics.rotated_assignments}", flush=True)
     print(f"assignment_reads: {metrics.assignment_reads}", flush=True)
+    print(f"skip_toggles: {metrics.skip_toggles}", flush=True)
+    print(f"skips_created: {metrics.skips_created}", flush=True)
+    print(f"skips_deleted: {metrics.skips_deleted}", flush=True)
     print(f"activity_create_seconds: {create_seconds:.2f}", flush=True)
     print(f"mixed_operations_seconds: {mixed_seconds:.2f}", flush=True)
     print(f"total_seconds: {total_seconds:.2f}", flush=True)
@@ -341,6 +417,12 @@ def valid_date(value: str) -> str:
     except ValueError as error:
         raise argparse.ArgumentTypeError("YYYY-MM-DD形式の正しい日付を指定してください。") from error
     return value
+
+
+def normalize_expected_status(expected_status: int | set[int]) -> set[int]:
+    if isinstance(expected_status, int):
+        return {expected_status}
+    return expected_status
 
 
 if __name__ == "__main__":

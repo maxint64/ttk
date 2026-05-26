@@ -26,7 +26,6 @@ const handlers = {
   onRemoveItem: removeItem,
   onSelectAssignmentDate: selectAssignmentDate,
   onToggleAssignment: toggleAssignment,
-  onToggleDayOff: toggleDayOff,
   onToggleSkip: toggleSkip,
 };
 
@@ -96,11 +95,7 @@ function isDisplayedUpdate(payload) {
   }
 
   if (payload.type === "availability_changed") {
-    if (!hasDisplayedActivity(payload.activity_id)) return false;
-    if (payload.off_on) {
-      return getSelectedDate(payload.activity_id) === payload.off_on;
-    }
-    return true;
+    return hasDisplayedActivity(payload.activity_id);
   }
 
   return true;
@@ -219,23 +214,6 @@ async function toggleAssignment(activityId, assignedOn, roleId, memberId, assign
   }
   deleteAssignmentView(activityId, assignedOn);
   await loadAndRender();
-}
-
-async function toggleDayOff(activityId, assignedOn, memberId, dayOff) {
-  const path = `/api/activities/${activityId}/members/${memberId}/days-off`;
-  try {
-    if (dayOff) {
-      await apiRequest(`${path}/${assignedOn}`, { method: "DELETE" });
-    } else {
-      await apiRequest(path, {
-        method: "POST",
-        body: { off_on: assignedOn },
-      });
-    }
-  } finally {
-    deleteAssignmentView(activityId, assignedOn);
-    await loadAndRender();
-  }
 }
 
 async function toggleSkip(activityId, roleId, memberId, skip) {

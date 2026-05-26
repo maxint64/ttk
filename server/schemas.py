@@ -24,16 +24,6 @@ class MemberResponse(BaseModel):
     created_at: str
 
 
-class MemberDayOffResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: int
-    activity_id: int
-    member_id: int
-    off_on: str
-    created_at: str
-
-
 class RoleMemberSkipResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -64,7 +54,6 @@ class ActivityResponse(BaseModel):
     roles: list[RoleResponse] = Field(default_factory=list)
     members: list[MemberResponse] = Field(default_factory=list)
     assignments: list[AssignmentResponse] = Field(default_factory=list)
-    member_days_off: list[MemberDayOffResponse] = Field(default_factory=list)
     role_member_skips: list[RoleMemberSkipResponse] = Field(default_factory=list)
 
 

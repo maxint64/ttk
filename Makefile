@@ -14,6 +14,7 @@ PERF_MIN_ROLES ?= 1
 PERF_MAX_ROLES ?= 10
 PERF_ROTATIONS ?= 100
 PERF_READS ?= 1000
+PERF_SKIPS ?= 100
 PERF_BASE_DATE ?= $(shell date +%F)
 PERF_RANDOM_SEED ?= 1
 PERF_URL ?= http://127.0.0.1:8000
@@ -112,5 +113,6 @@ docker-perf:
 		--max-roles $(PERF_MAX_ROLES) \
 		--rotations $(PERF_ROTATIONS) \
 		--reads $(PERF_READS) \
+		--skips $(PERF_SKIPS) \
 		--base-date $(PERF_BASE_DATE) \
 		--random-seed $(PERF_RANDOM_SEED)

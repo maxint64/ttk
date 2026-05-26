@@ -19,20 +19,6 @@ depends_on = None
 def upgrade() -> None:
     op.execute(
         """
-        CREATE TABLE IF NOT EXISTS member_days_off (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            activity_id INTEGER NOT NULL,
-            member_id INTEGER NOT NULL,
-            off_on TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE,
-            FOREIGN KEY (member_id) REFERENCES members(id) ON DELETE CASCADE,
-            UNIQUE (activity_id, member_id, off_on)
-        )
-        """
-    )
-    op.execute(
-        """
         CREATE TABLE IF NOT EXISTS role_member_skips (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             activity_id INTEGER NOT NULL,
@@ -50,4 +36,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS role_member_skips")
-    op.execute("DROP TABLE IF EXISTS member_days_off")

@@ -52,7 +52,7 @@ make docker-perf
 小さい件数で試す場合:
 
 ```bash
-make docker-perf PERF_ACTIVITIES=20 PERF_ROTATIONS=5 PERF_READS=50
+make docker-perf PERF_ACTIVITIES=20 PERF_ROTATIONS=5 PERF_READS=50 PERF_SKIPS=10
 ```
 
 ## ローカルで起動
